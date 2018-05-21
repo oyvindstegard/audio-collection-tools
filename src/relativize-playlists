@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#
+# relativize-playlists
+#
+# Relativize paths in playlist files.
+#
+# Copyright 2018, Øyvind Stegard <oyvind@stegard.net>
+
+from audio_collection_tools import *
+from audio_collection_tools.relativize_playlists import *
+
+import argparse
+parser = argparse.ArgumentParser(
+    description="""Relativize paths in playlist files""",
+    epilog="""Relative paths in playlists are useful so that the
+    location of a media collection can be moved around without
+    breaking the playlists inside it.""")
+
+parser.add_argument('filenames', metavar='FILE', type=str, nargs='+',
+                    help='Playlist.pls [Playlist2.m3u ..]')
+parser.add_argument('-u', '--force-utf8', action='store_true', dest='force_utf8', default=False,
+                    help="""Force use of UTF-8 encoding for .m3u
+                    playlists, which applies to both reading and
+                    writing. For .pls and .m3u8 playlists, UTF-8
+                    encoding is always used regardless of this
+                    option.""")
+
+parser.add_argument('-k', '--keep', action='store_true',
+                    dest='keep_original', default=False,
+                    help="""Keep original playlist files instead
+                    of modifying files in place. Relativized files
+                    will be created with a ".rel"-suffix.""")
+
+args = parser.parse_args()
+for filename in args.filenames:
+    relativize(filename, args.force_utf8, args.keep_original)

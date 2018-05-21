@@ -1,0 +1,516 @@
+# -*- coding: utf-8 -*-
+#
+# mass-audio-transcoder module
+#
+# Mass parallel Audio Transcoder ffmpeg frontend.
+# Copyright 2018, Øyvind Stegard <oyvind@stegard.net>
+#
+# Requires: Python 3, python-mutagen and a recent-ish (2017/18) ffmpeg command
+# in PATH.
+
+import sys
+import os, shutil, subprocess
+import re
+from urllib.parse import unquote
+import fnmatch
+from collections import OrderedDict
+import mutagen
+
+import logging
+import logging.handlers
+import multiprocessing
+
+# ffmpeg option templates for various transcoding targets
+# for AAC targets, disable album art copying, since it's unreliable with ffmpeg
+FFMPEG_EXECUTABLE = 'ffmpeg'
+FFMPEG_CODEC_OPTS = {'mp3':            ['-codec:a libmp3lame',
+                                        '<-qscale:a +transcode_quality+> <-b:a +transcode_bitrate+k>'],
+                     'aac':            ['-map 0:a -codec:a aac',
+                                        '<-vbr +transcode_quality+> <-b:a +transcode_bitrate+k>'],
+                     'fdkaac':         ['-map 0:a -codec:a libfdk_aac',
+                                        '<-vbr +transcode_quality+> <-b:a +transcode_bitrate+k>'],
+                     'vorbis':         ['-codec:a libvorbis',
+                                        '<-qscale:a +transcode_quality+> <-b:a +transcode_bitrate+k>']
+                     }
+
+FFMPEG_CODEC_EXT  = {'vorbis': 'ogg', 'mp3':'mp3', 'aac':'m4a', 'fdkaac':'m4a'}
+FFMPEG_DEFAULT_CODEC = 'mp3'
+
+# Basic list of supported input formats. Other formats will work as long as both
+# mutagen and ffmpeg understands how to decode them.
+INPUT_AUDIOFILE_PATTERNS = ['*.mp3', '*.ogg', '*.flac', '*.m4a', '*.wav']
+
+# Default templates for naming of transcoded files:
+DEFAULT_TEMPLATE = '<albumartist_or_artist>< - +album+>/<track+. ><title>'
+DEFAULT_TEMPLATE_PLAYLIST = '<playlist_name>/<playlist_filenumber>. <title> - <artist>'
+
+# Wrap logger with simple inter-process mutex-locking to avoid output
+# mess when multiple subprocesses are logging. This becomes
+# inefficient with large amounts logging output, but should not matter
+# much for this tool.
+class SynchronizedLog:
+    def __init__(self, log, lock):
+        self.log = log
+        self.lock = lock
+    def info(self, msg, *args, **kwargs):
+        with self.lock:
+            self.log.info(msg, *args, **kwargs)
+    def debug(self, msg, *args, **kwargs):
+        with self.lock:
+            self.log.debug(msg, *args, **kwargs)
+    def warn(self, msg, *args, **kwargs):
+        with self.lock:
+            self.log.warn(msg, *args, **kwargs)
+    def error(self, msg, *args, **kwargs):
+        with self.lock:
+            self.log.error(msg, *args, **kwargs)
+    def setLevel(self, level):
+        with self.lock:
+            self.log.setLevel(level)
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(processName)s] %(levelname)-8s %(message)s')
+LOG_LOCK = multiprocessing.Lock()
+LOG = SynchronizedLog(logging.getLogger('mpat'), LOG_LOCK)
+
+class ApplicationError(Exception):
+    pass
+
+class UnsupportedFileError(ApplicationError):
+    def __init__(self, message, filetype):
+        super().__init__(message)
+        self.filetype = filetype
+
+class CommandError(ApplicationError):
+    pass
+
+class TemplateError(ApplicationError):
+    pass
+
+class Tags:
+    """Thin wrapper around mutagen's "easy" tag reading API.
+
+    If a tag has multiple values, they are joined before returned.
+    """
+    def __init__(self, filename):
+        try:
+            self.mutagen_file = mutagen.File(filename, easy=True)
+        except Exception as e:
+            LOG.warn('Could not read tags for file: {}, {}\n'.format(filename, str(e)))
+            self.mutagen_file = None
+
+    def get(self, tagname):
+        if not self.mutagen_file or not self.mutagen_file.tags:
+            return None
+
+        values = []
+        if tagname.upper() in self.mutagen_file.tags:
+            values = self.mutagen_file.tags.get(tagname.upper())
+        elif tagname in self.mutagen_file.tags:
+            values = self.mutagen_file.tags.get(tagname)
+        
+        if len(values) > 0:
+            return ','.join(values)
+        else:
+            return None
+
+    def tagnames(self):
+        if not self.mutagen_file or not self.mutagen_file.tags:
+            return []
+
+            
+def ffmpeg_check_version():
+    """Checks version of ffmpeg in path. Returns version as a string on success."""
+    ffmpeg_path = shutil.which(FFMPEG_EXECUTABLE)
+    if not ffmpeg_path:
+        raise CommandError("Missing '{}' command in system PATH".format(FFMPEG_EXECUTABLE))
+
+    output = subprocess.check_output([ffmpeg_path, '-version'])
+    vmatch = re.search(r'^ffmpeg version ([^\s]+)', output.decode())
+    if vmatch:
+        return vmatch.group(1)
+    else:
+        raise CommandError("Unable to determine ffmpeg version for executable '{}'".format(ffmpeg_path))
+
+def ffmpeg_build_args(inputfile, outputfile, codec, transcode_quality=None, transcode_bitrate=None):
+    args = ['-i', inputfile, '-y']
+    var_resolver = {'transcode_quality':transcode_quality, 'transcode_bitrate':transcode_bitrate}
+    for argpart in FFMPEG_CODEC_OPTS[codec]:
+        args += expand_template(argpart, var_resolver).split()
+
+    args.append(outputfile)
+    
+    return args
+        
+def is_audio_file(filename):
+    for p in INPUT_AUDIOFILE_PATTERNS:
+        if fnmatch.fnmatch(os.path.basename(filename).lower(), p):
+            return True
+
+    return False
+
+def is_pls_playlist(filename):
+    return fnmatch.fnmatch(os.path.basename(filename).lower(), '*.pls')
+
+def is_m3u_playlist(filename):
+    for pattern in ['*.m3u','*.m3u8']:
+        if fnmatch.fnmatch(os.path.basename(filename).lower(), '*.m3u'):
+            return True
+
+    return False
+
+def is_playlist(filename):
+    return is_pls_playlist(filename) or is_m3u_playlist(filename)
+
+def extract_pls_paths(plfile):
+    """Extract audio file paths from PLS playlist. Argument must be open file handle."""
+    paths = []
+    regexp = re.compile('^(File[0-9]+)=(.*)$')
+    for line in plfile:
+        m = regexp.match(line)
+        if m and len(m.group(2).strip()) > 0:
+            audiofile = m.group(2)
+            if audiofile.startswith('file://'):
+                audiofile = unquote(audiofile[7:])
+            
+            if is_audio_file(audiofile):
+                paths.append(audiofile)
+
+    return paths
+
+def extract_m3u_paths(plfile):
+    """Extract audio file paths from M3U playlist. Argument must be open file handle."""
+    paths = []
+    regexp = re.compile('^([^#].*)$')
+    for line in plfile:
+        m = regexp.match(line)
+        if m and len(m.group(1).strip()) > 0:
+            audiofile = m.group(1)
+            if audiofile.startswith('file://'):
+                audiofile = unquote(audiofile[7:])
+
+            if is_audio_file(audiofile):
+                paths.append(audiofile)
+
+    return paths
+
+def get_audiofile_paths_from_playlist(filename):
+    """Process playlist, return list of absolute paths to all audio files.."""
+
+    invokedir = os.getcwd()
+    pldir = os.path.dirname(filename)
+    if pldir == '':
+        pldir = '.'
+
+    try:
+        plfile = open(filename, 'r', encoding='utf8')
+        if is_pls_playlist(filename):
+            paths = extract_pls_paths(plfile)
+        elif is_m3u_playlist(filename):
+            paths = extract_m3u_paths(plfile)
+        else:
+            raise UnsupportedFileError('Unknown playlist type: {}'.format(filename),
+                                       os.path.splitext(filename)[1])
+
+        os.chdir(pldir)
+        return [os.path.abspath(p) for p in paths]
+        
+    finally:
+        os.chdir(invokedir)
+        plfile.close()
+        
+
+def get_audiofile_paths(directory):
+    """Process directory and return list of audio files.
+
+    If directory is actually a file, only that file is returned as a
+    single element list, if it is an audio file.
+    
+    Always returns absolute paths.
+    """
+
+    if os.path.isfile(directory):
+        if is_audio_file(directory):
+            return [os.path.abspath(directory)]
+        else:
+            LOG.warn('Not a known audio file type: {}'.format(directory))
+            return []
+    
+    paths = []
+    for dir, subdirs, files in os.walk(directory):
+        subdirs.sort()
+        files.sort()
+        paths.extend([os.path.normpath(os.path.join(dir, f)) for f in filter(is_audio_file, files)])
+
+    return [os.path.abspath(p) for p in paths]
+
+PATH_CLEANING_PATTERNS = [(re.compile(p), r) for p, r in
+                          [(r'[?*:;<>|\\]', ''),
+                           (r'["`˝]', '\''),
+                           (r'^[. ]+', ''),
+                           (r'[. ]+$', ''),
+                           (r'[.]+/', '/'),
+                           (r'/[.]+', '/'),
+                           (r'\s{2,}', ' '),
+                           (r'\s*/\s*', '/'),
+                           (r'/{2,}', '/')]]
+def clean_path(path):
+    """Remove file system unsafe characters from file path."""
+    for pattern, replacement in PATH_CLEANING_PATTERNS:
+        path = re.sub(pattern, replacement, path)
+
+    return path
+
+def expand_template(template, variable_resolver, allow_slash_in_var_values=True):
+    """Expands a template with <var> placeholders.
+
+    Syntax:
+    'Some template with <thisvar>, <thatvar+suffix> and <prefix+othervar+suffix>'
+
+    When plus chars (+) are used, it denotes a suffix/prefix that
+    should only be included if the value exists. (Some audio files may
+    lack tags, etc.).
+
+    Literal angle brackets cannot be used at all in templates, and
+    plus chars cannot be used in suffix or prefix inside a variable
+    expression.
+
+    The variable resolver should be a function which accepts a single
+    argument, namely a variable name. It should return None for
+    variables which cannot be resolved.
+
+    """
+
+    def resolver(v):
+        if isinstance(variable_resolver, dict):
+            return variable_resolver.get(v)
+        else:
+            return variable_resolver(v)
+        
+    def replacer(m):
+        if not m.group(1):
+            return ''
+
+        parts = m.group(1).split('+', 2)
+        cond_prefix = ''
+        cond_suffix = ''
+        if len(parts) == 1:
+            var = parts[0]
+        elif len(parts) == 2:
+            var = parts[0]
+            cond_suffix = parts[1]
+        elif len(parts) == 3:
+            cond_prefix = parts[0]
+            var = parts[1]
+            cond_suffix = parts[2]
+        else:
+            raise TemplateError('Illegal number of elements in expression "<{}>"'.format(m.group(1)))
+            
+        value = resolver(var)
+        if value and not allow_slash_in_var_values:
+            value = value.replace('/', '-')
+
+        return '' if value is None else '{}{}{}'.format(cond_prefix, value, cond_suffix)
+        
+    return re.sub(r'<([^<>]+)?>', replacer, template)
+
+def zeropad(n, length):
+    """Zeropad a positive number to given length."""
+    return str(n).zfill(length)
+
+def tag_variable_resolver(source):
+    """Returns a function which can be used as template variable resolver
+    for a particular audio file source based on file tag values.
+
+    """
+    tags = Tags(source.filepath)
+
+    def resolver(var):
+        var = var.lower()
+        if var in ['a', 'artist']:
+            return tags.get('artist')
+        elif var in ['b', 'album']:
+            return tags.get('album')
+        elif var in ['t', 'title']:
+            return tags.get('title')
+        elif var in ['aa', 'albumartist']:
+            return tags.get('albumartist')
+        elif var in ['aaa', 'albumartist_or_artist']:
+            val = tags.get('albumartist')
+            if not val:
+                val = tags.get('artist')
+
+            return val
+        elif var in ['tn', 'track', 'tracknumber']:
+            val = tags.get('tracknumber')
+            if val and '/' in val:
+                val = val.split('/')[0]
+
+            try:
+                return zeropad(int(val), 2) if val else None
+            except:
+                return None
+        elif var in ['tt', 'tracktotal']:
+            val = tags.get('tracktotal')
+            if not val:
+                val = tags.get('tracknumber')
+                if not '/' in val:
+                    return None
+                else:
+                    val = val.split('/')[1]
+
+            try:
+                return zeropad(int(val), 2) if val else None
+            except:
+                return None
+        elif var in ['dn', 'discnumber']:
+            val = tags.get('discnumber')
+            try:
+                return zeropad(val, 2) if val else None
+            except:
+                return None
+        elif var == 'filename':
+            return source.basename(True)
+        elif var == 'filename_noext':
+            return source.basename(False)
+        elif var == 'parentdir_basename':
+            return source.parentdir_basename()
+        elif var == 'ext':
+            return source.filetype()
+        elif var == 'filenumber':
+            return zeropad(source.filenumber, len(str(source.totalfiles)))
+        elif var == 'totalfiles':
+            return str(source.totalfiles)
+        elif var == 'playlist_name':
+            return source.playlist_name
+        elif var == 'playlist_filenumber':
+            if source.playlist_filenumber and source.playlist_totalfiles:
+                return zeropad(source.playlist_filenumber, source.playlist_totalfiles)
+            else:
+                return None
+        elif var == 'playlist_totalfiles':
+            if source.playlist_totalfiles:
+                return str(source.playlist_totalfiles)
+            else:
+                return None
+
+        else:
+            # Try rest of tags as fallback
+            return tags.get(var)
+
+    return resolver
+
+class TranscodeSpec:
+    """Transcoding options"""
+    def __init__(self, codec, force_transcode, quality=None, bitrate=None):
+        self.codec = codec
+        self.force_transcode = bool(force_transcode)
+        self.quality = quality
+        self.bitrate = bitrate
+
+class Source:
+    """Represents an audio file source (unit of transcoding work)."""
+    def __init__(self, filepath, transcode_spec,
+                 playlist_name=None, playlist_filenumber=None, playlist_totalfiles=None):
+        self.filepath = filepath
+        self.transcode_spec = transcode_spec
+
+        self.filenumber = -1
+        self.totalfiles = -1
+
+        self.playlist_name = playlist_name
+        self.playlist_filenumber = playlist_filenumber
+        self.playlist_totalfiles = playlist_totalfiles
+
+    def basename(self, include_ext=True):
+        """Return basename of audio file, optionally without the extension."""
+        bn = os.path.basename(self.filepath)
+        return bn if include_ext else os.path.splitext(bn)[0]
+
+    def filetype(self):
+        """Return lower case normalized audio file type (extension).
+
+        Returns None if unable to determine.
+        """
+
+        ext = os.path.splitext(self.filepath)[1].lower()
+        if ext.startswith('.'):
+            ext = ext[1:]
+        
+        return ext if len(ext) > 0 else None
+
+    def parentdir_basename(self):
+        """Return basename of parent directory."""
+        return os.path.basename(os.path.dirname(self.filepath))
+
+    def __str__(self):
+        template = 'Source{{ {}, filenumber={}, totalfiles={}'
+        if self.playlist_name:
+            template += ', playlist_name={}, playlist_filenumber={}, playlist_totalfiles={}'
+
+        return template.format(self.filepath, self.filenumber, self.totalfiles,
+                               self.playlist_name, self.playlist_filenumber, self.playlist_totalfiles)
+
+
+def generate_dest_path(source, template, destdir):
+    """Creates destination path up to and including the final directory.
+
+    If the template and cleanups result in an empty string, a fallback
+    is used where the original filename and parent directory are used
+    under destdir.
+    """
+    
+    var_resolver = tag_variable_resolver(source)
+    result = expand_template(template, var_resolver, False)
+    result = clean_path(result).strip()
+
+    if len(result) == 0 or result.endswith('/'):
+        result = clean_path(os.path.join(source.parentdir_basename(), source.basename(False)))
+        LOG.warn("Template expansion resulted in empty string for source file '{}', using fallback naming: '{}'".format(source.filepath, result))
+
+    ext = FFMPEG_CODEC_EXT[source.transcode_spec.codec]
+    if not result.endswith('.' + ext):
+        result += '.' + ext
+
+    if os.path.isabs(result):
+        LOG.warn("Template expansion resulted in an absolute path '{}' for source file '{}', this is not allowed, skipping.".format(result, source.filepath))
+        return None
+    
+    abspath = os.path.join(destdir, result)
+
+    return abspath
+
+def prepare_dest_paths(sources, args):
+    """Returns a list of 2-element tuples, where first element is the
+    source and the second element is the generated destination path.
+
+    Checks input material for naming collisions and other problems in
+    the process.
+
+     which cannot be executed, for various reasons, are
+    logged and not included in the returned list.
+    """
+
+    destpaths = OrderedDict()
+    for source in sources:
+        template = args.template if not source.playlist_name else args.playlist_template
+        destpath = generate_dest_path(source, template, args.destdir)
+        if not destpath:
+            continue
+
+        if source.filepath == destpath:
+            LOG.warn("Source file '{}' has itself as destination, skipping.".format(source.filepath))
+            continue
+
+        if not args.overwrite and os.path.exists(destpath):
+            LOG.warn("Source file '{}' has destination path '{}' which already exists and overwrite is off, skipping".format(source.filepath, destpath))
+            continue
+    
+        if destpath in destpaths:
+            processed_source = destpaths[destpath]
+            LOG.warn("Naming collision between sources '{}' and '{}' for dest path '{}', skipping".format(processed_source.filepath, source.filepath, destpath))
+            continue
+        else:
+            destpaths[destpath] = source
+
+    return [(v, k) for k, v in destpaths.items()]
+        

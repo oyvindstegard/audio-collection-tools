@@ -1,0 +1,89 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#
+# generate-playlists
+#
+# A tool which can generate playlists by recursively traversing a set
+# of directories, looking for audio files. Supports simple filtering
+# and sorting options.
+#
+# Requires Python 3 and python-mutagen.
+#
+# Copyright (C) 2018, Øyvind Stegard <oyvind@stegard.net>
+
+from audio_collection_tools import *
+from audio_collection_tools.generate_playlists import *
+
+import argparse
+parser = argparse.ArgumentParser(
+    description="""Generate audio file playlists (m3u or pls), optionally filtering
+                and sorting on various criteria. Please note that
+                relative directory paths specified for a playlist
+                are interpreted as relative to the playlist file
+                itself, and not the directory where this command
+                is invoked. Use absolute paths in the specs if you
+                want that. The directories are always processed
+                recursively.""",
+    epilog="""Available sort criteria: mtime, genre, date, track, random.
+              (Sorting by track only makes sense when making a
+              playlist for an album.) Available filters: genre
+              (case insensitive regexp). Use genre=!<regexp> to
+              match anything but the regexp. Sort and genre can be
+              combined. Recognized audio files: {}""".format(
+                  ', '.join(map(lambda p: p[2:], PLAYLIST_FILE_PATTERNS))))
+
+parser.add_argument('plspecs', metavar='PLSPEC', type=str, nargs='+',
+                    help="""playlist.pls:DIR1[,../DIR2]
+                    playlists/rock.m3u:/music/Album/,genre='rock|metal',sort=date""")
+
+parser.add_argument('-u','--force-utf8', action='store_true', dest='force_utf8',
+                    help="""Force UTF-8 encoding for regular .m3u playlists. This violates the
+                    spec, but allows creating .m3u files
+                    containing audio file names with characters
+                    outside of the latin-1 character set. Has no
+                    effect for .pls or .m3u8 playlists, which
+                    always use UTF-8-encoding.""")
+
+args = parser.parse_args()
+pl_specs = []
+for arg in args.plspecs:
+    try:
+        plfile, specs = arg.split(':')
+    except:
+        sys.stderr.write('Error: each spec must contain a colon separating the playlist file from dirs')
+        sys.exit(1)
+
+    sortspec = None
+    genrematch = None
+    genrematch_invert = False
+    dirlist = []
+
+    specs = [i.strip() for i in specs.split(',')]
+    for s in specs:
+        if not re.match(r'^[a-z]+=.*$', s):
+            dirlist.append(s)
+        else:
+            try:
+                d, v = s.split('=', 1)
+                if d == 'sort':
+                    if v in ['mtime','genre','date','track','random']:
+                        sortspec = v
+                    else:
+                        raise ValueError('Invalid sorting spec: {}'.format(v))
+                elif d == 'genre':
+                    if len(v) > 0 and v[0] == '!':
+                        genrematch_invert = True
+                        v = v[1:]
+                    genrematch = re.compile(v, flags=re.IGNORECASE)
+            except:
+                sys.stderr.write('Error: invalid directive: {}\n'.format(s))
+                sys.exit(1)
+
+    for d in [os.path.join(os.path.dirname(plfile), x) for x in dirlist]:
+        if not os.path.isdir(d):
+            raise ValueError('Not a directory: {}'.format(d))
+
+    pl_specs.append(PlaylistSpec(plfile, dirlist, args.force_utf8, sortspec, genrematch, genrematch_invert))
+
+for plspec in pl_specs:
+    generate_playlist(plspec)

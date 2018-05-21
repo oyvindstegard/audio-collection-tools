@@ -1,0 +1,240 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#
+# mass-audio-transcoder
+#
+# Mass parallel Audio Transcoder ffmpeg frontend.
+# Copyright 2018, Øyvind Stegard <oyvind@stegard.net>
+#
+# Requires: Python 3, python-mutagen and a recent-ish (2017/18) ffmpeg command
+# in PATH.
+#
+
+from audio_collection_tools import *
+from audio_collection_tools.mass_audio_transcoder import *
+
+import multiprocessing
+import shutil
+        
+def execute_work_unit(work_unit):
+    """Executes work unit, typically this function expects to be called in a sub process."""
+
+    source, destpath = work_unit
+
+    try:
+        if not os.path.isdir(os.path.dirname(destpath)):
+            os.makedirs(os.path.dirname(destpath))
+    except Exception as e:
+        LOG.warn("Failed to create destination directory '{}': {}".format(os.path.dirname(destpath), str(e)))
+        return 1
+
+    import signal
+    signal.signal(signal.SIGINT, default_sigint_handler) # handle interrupts while working
+
+    if source.filetype() == FFMPEG_CODEC_EXT[source.transcode_spec.codec] and not source.transcode_spec.force_transcode:
+        LOG.info('copy   {}'.format(destpath))
+        try:
+            shutil.copy(source.filepath, destpath)
+            returncode = 0
+        except KeyboardInterrupt:
+            LOG.info('Shutdown.')
+            returncode = 1
+        except Exception as e:
+            LOG.warn("Failed to copy '{}' to '{}': {}".format(source.filepath, destpath, str(e)))
+            returncode = 1
+    else:
+        ffmpeg_args = ffmpeg_build_args(source.filepath, destpath, source.transcode_spec.codec,
+                                        source.transcode_spec.quality,
+                                        source.transcode_spec.bitrate)
+        LOG.debug(ffmpeg_args)
+
+        LOG.info('ffmpeg {}'.format(destpath))
+        try:
+            with subprocess.Popen(['ffmpeg'] + ffmpeg_args,
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) as proc:
+
+                returncode = proc.wait()
+                if returncode != 0:
+                    LOG.warn("ffmpeg failed for input '{}' with code {}".format(source.filepath, returncode))
+                    LOG.warn("ffmpeg command was: '{}'".format(" ".join(['ffmpeg'] + ffmpeg_args)))
+                    
+        except KeyboardInterrupt:
+            LOG.info('Shutdown.')
+            returncode = 1
+        except Exception as e:
+            LOG.warn("Failed to execute ffmpeg for input '{}': {}".format(source.filepath, str(e)))
+            LOG.warn("ffmpeg command was: '{}'".format(" ".join(['ffmpeg'] + ffmpeg_args)))
+            returncode = 1
+
+    signal.signal(signal.SIGINT, signal.SIG_IGN) # ignore interrupts while idle
+
+    return returncode
+
+
+import argparse
+parser = argparse.ArgumentParser(
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    description="""Mass Parallel Audio Transcoder. Transcode any
+number of playlists and audio files/dirs in parallel to a
+destination directory. Requires the 'ffmpeg' command in system
+path.
+""",epilog="""With regard to playlists, this tool is mainly targeted at
+transcoding for devices which don't understand playlists, and so a
+playlist will turn into a directory with all the files directly
+below, named in order with the default template.
+
+You are free to use slashes in the templates to generate the
+desired structure under the destination directory.
+
+Supported input playlist formats: m3u, m3u8, pls.
+""")
+
+parser.add_argument('inputs', metavar='INPUT', type=str, nargs='+',
+                    help="""Directory trees containing audio
+                    files, audio files and/or playlists pointing
+                    to audio files. Always operates recursively on
+                    directories. Only processes playlists directly
+                    provided as arguments.""")
+
+parser.add_argument('destdir', metavar='DESTDIR', type=str,
+                    help="""Destination root directory. Paths and
+                    files under this directory will be generated
+                    based on templates with data from audio file
+                    tags and playlist names. """)
+
+parser.add_argument('--help-templates', action='store_true',
+                    dest='help_templates', help="""Show help for templates""")
+
+parser.add_argument('-t', '--template', type=str, dest='template',
+                    help="""Select template for audio files that
+                    are not part of playlists. """,
+                    default=DEFAULT_TEMPLATE)
+
+parser.add_argument('-p', '--playlist-template', type=str,
+                    dest='playlist_template', help="""Select
+                    template for files that are part of
+                    playlists.""",
+                    default=DEFAULT_TEMPLATE_PLAYLIST)
+
+parser.add_argument('-d', '--dry', action='store_true',
+                    dest='dry', help="""Dry run, only show input
+                    files and destinations, do not actually do any
+                    transcoding.""")
+
+parser.add_argument('-f', '--force-transcode',
+                    action='store_true', dest='force_transcode',
+                    help="""Force transcoding, even if source file
+                    is already in the same format as target file.
+                    Useful if lowering quality for smaller file sizes.""")
+
+parser.add_argument('-o', '--overwrite', action='store_true',
+                    dest='overwrite', help="""Overwrite existing
+                    files at destination paths.""", default=False)
+
+parser.add_argument('-c', '--codec', type=str, default='mp3', help="""
+                    Select audio codec.""",
+                    choices=FFMPEG_CODEC_OPTS)
+
+quality_options = parser.add_mutually_exclusive_group(required=False)
+quality_options.add_argument('-q', '--quality', dest='quality', help=
+                             """Set encoding quality, range and default value depends on chosen
+                             codec, see ffmpeg docs.""", type=int)
+
+quality_options.add_argument('-b', '--bitrate', dest='bitrate', help=
+                    """Set encoding bitrate i kbit/s, range and default value depends on
+                    chosen codec, see ffmpeg docs.""", type=int)
+
+parser.add_argument('-x', '--debug', dest='debug',
+                    action='store_true', help="""Enable debug
+                    logging.""", default=False)
+
+parser.add_argument('-v', '--version', action='version', version=VERSION)
+
+args = parser.parse_args()
+
+if args.help_templates:
+    doc = """Templates are used for naming transcoded destination files automatically.
+
+    One template is used for audio files that are not part of any
+    playlist, and other one for playlists. Template values should
+    never include file extension, which is handled automatically
+    and depends on destination format.
+
+    Documentation from the template expansion function follows.
+
+    """ + expand_template.__doc__
+
+    doc = "\n".join([line.strip() for line in doc.split('\n')])
+    print(doc)
+    sys.exit(0)
+
+if args.debug:
+    LOG.setLevel(logging.DEBUG)
+
+if not os.path.isdir(args.destdir):
+    LOG.error('Destination not a directory: {}'.format(args.destdir))
+    sys.exit(1)
+
+if not os.access(args.destdir, os.W_OK):
+    LOG.error('Destination not a writable directory: {}'.format(args.destdir))
+    sys.exit(1)
+
+LOG.info('Using ffmpeg version {}'.format(ffmpeg_check_version()))
+
+transcode_spec = TranscodeSpec(args.codec, args.force_transcode, args.quality, args.bitrate)
+
+sources = []
+for inputfile in args.inputs:
+    LOG.info("Scanning input {} ..".format(inputfile))
+    if is_playlist(inputfile):
+        paths = get_audiofile_paths_from_playlist(inputfile)
+        pltitle = os.path.splitext(os.path.basename(inputfile))[0]
+        plsources = [Source(path, transcode_spec, pltitle, n, len(paths)) for n, path in enumerate(paths, 1)]
+
+        sources.extend(plsources)
+
+    else:
+        paths = get_audiofile_paths(inputfile)
+        sources.extend([Source(path, transcode_spec) for path in paths])
+
+for n, source in enumerate(sources, 1):
+    source.filenumber = n
+    source.totalfiles = len(sources)
+
+if len(sources) == 0:
+    LOG.info('No input audio files found, nothing to do, goodbye.')
+    sys.exit(0)
+
+LOG.info('Sources provided a total of {} audio files'.format(len(sources)))
+LOG.info('Preparing destination paths ..')
+work_units = prepare_dest_paths(sources, args)
+
+if args.dry:
+    LOG.info('Dry run only, files to transcode:')
+    for work_unit in work_units:
+        print('{} -> {}'.format(work_unit[0].filepath, work_unit[1]))
+    sys.exit(0)
+
+LOG.info('Starting work ..')
+
+def pool_worker_init():
+    import signal
+    global default_sigint_handler
+    default_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+    multiprocessing.current_process().name = re.sub('^[a-zA-Z]+', 'Worker',
+                                                    multiprocessing.current_process().name)
+    LOG.debug('init {}'.format(multiprocessing.current_process().name))
+
+with multiprocessing.Pool(multiprocessing.cpu_count(), pool_worker_init) as pool:
+    try:
+        results = pool.map_async(execute_work_unit, work_units).get()
+
+        failed = sum(map(lambda n: 1 if n > 0 else 0, results))
+        skipped = len(sources) - len(results)
+        LOG.info('Finished, {} transcodings succeeded, {} failed, {} skipped.'.format(
+            len(results)-failed, failed, skipped))
+
+    except KeyboardInterrupt:
+        LOG.warn('User interrupt')
+        sys.exit(130)
