@@ -74,8 +74,7 @@ and create playlists, optionally filtering and sorting the playlists
 on various criteria.
 
 For instance, by filtering on a genre regexp, you can automatically
-make genre-focused playlists of different music genres from a large
-collection.
+make genre-focused playlists from a larger collection.
 
 See
 
