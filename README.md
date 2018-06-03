@@ -22,7 +22,8 @@ of course.)
 
 ## Installation
 
-TODO
+    $ git clone https://github.com/oyvindstegard/audio-collection-tools.git
+    $ python3 setup.py install
 
 ## The tools so far
 
@@ -54,9 +55,16 @@ See
 for more details.
 
 
-#### Usage examples
+#### Usage example: creating an MP3 mirror of an existing audio collection
 
-TODO
+    $ mkdir /tmp/my-music-mp3
+    $ mass-audio-transcoder -c mp3 /my-music-collection/ /tmp/my-music-mp3/
+
+This requires that the source audio collection files have meta tags
+attached to them, since the meta data determines the destination
+directory structure based on a naming template.
+
+#### TODO more examples
 
 
 ### generate-playlists
@@ -97,7 +105,8 @@ for more details.
 
 TODO
 
-## Issues and contributing
+## Development, issues and contributing
+
 Bug reports and pull requests are welcome.
 
 The tools have been developed in a Python 3 virtual environment, which
@@ -107,6 +116,10 @@ the base directory of the project:
     $ pyvenv venv-dev
     $ source venv-dev/bin/activate
     $ python3 setup.py develop
+
+### Running unit tests
+
+    $ python3 setup.py test
 
 ### Project TODO
 
