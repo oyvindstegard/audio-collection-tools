@@ -83,9 +83,12 @@ See
 for more details.
 
 
-#### Usage examples
+#### Usage example:
 
-TODO
+Create a playlist file `jazz.m3u` of all funk and jazz music with
+randomized order:
+
+    $ generate-playlists jazz.m3u:/path/to/my-audio-collection/,genre='jazz|funk',sort=random
 
 
 ### relativize-playlists
