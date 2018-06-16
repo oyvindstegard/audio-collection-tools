@@ -24,7 +24,8 @@ import multiprocessing
 # for AAC targets, disable album art copying, since it's unreliable with ffmpeg
 FFMPEG_EXECUTABLE = 'ffmpeg'
 FFMPEG_CODEC_OPTS = {'mp3':            ['-codec:a libmp3lame',
-                                        '<-qscale:a +transcode_quality+> <-b:a +transcode_bitrate+k>'],
+                                        '<-qscale:a +transcode_quality+> <-b:a +transcode_bitrate+k>',
+                                        '-id3v2_version 3'],
                      'aac':            ['-map 0:a -codec:a aac',
                                         '<-vbr +transcode_quality+> <-b:a +transcode_bitrate+k>'],
                      'fdkaac':         ['-map 0:a -codec:a libfdk_aac',
@@ -32,6 +33,10 @@ FFMPEG_CODEC_OPTS = {'mp3':            ['-codec:a libmp3lame',
                      'vorbis':         ['-codec:a libvorbis',
                                         '<-qscale:a +transcode_quality+> <-b:a +transcode_bitrate+k>']
                      }
+
+# Ogg audio files have metadata attached to audio stream instead of
+# container, which makes a difference for ffmpeg.
+FFMPEG_INPUT_FILE_OPTS = {'ogg': ['-map_metadata 0:s:0']}
 
 FFMPEG_CODEC_EXT  = {'vorbis': 'ogg', 'mp3':'mp3', 'aac':'m4a', 'fdkaac':'m4a'}
 FFMPEG_DEFAULT_CODEC = 'mp3'
@@ -134,13 +139,22 @@ def ffmpeg_check_version():
 def ffmpeg_build_args(inputfile, outputfile, codec, transcode_quality=None, transcode_bitrate=None):
     args = ['-i', inputfile, '-y']
     var_resolver = {'transcode_quality':transcode_quality, 'transcode_bitrate':transcode_bitrate}
+
+    inputfiletype = get_normalized_extension(inputfile)
+    if inputfiletype and inputfiletype in FFMPEG_INPUT_FILE_OPTS:
+        for argpart in FFMPEG_INPUT_FILE_OPTS[inputfiletype]:
+            args += expand_template(argpart, var_resolver).split()
+        
     for argpart in FFMPEG_CODEC_OPTS[codec]:
         args += expand_template(argpart, var_resolver).split()
 
     args.append(outputfile)
     
     return args
-        
+
+def get_normalized_extension(filename):
+    return os.path.splitext(filename)[1].lower()[1:]
+
 def is_audio_file(filename):
     for p in INPUT_AUDIOFILE_PATTERNS:
         if fnmatch.fnmatch(os.path.basename(filename).lower(), p):
@@ -432,10 +446,7 @@ class Source:
         Returns None if unable to determine.
         """
 
-        ext = os.path.splitext(self.filepath)[1].lower()
-        if ext.startswith('.'):
-            ext = ext[1:]
-        
+        ext = get_normalized_extension(self.filepath)
         return ext if len(ext) > 0 else None
 
     def parentdir_basename(self):
