@@ -32,6 +32,8 @@ parser.add_argument('-k', '--keep', action='store_true',
                     of modifying files in place. Relativized files
                     will be created with a ".rel"-suffix.""")
 
+parser.add_argument('-v', '--version', action='version', version=VERSION)
+
 args = parser.parse_args()
 for filename in args.filenames:
     relativize(filename, args.force_utf8, args.keep_original)
