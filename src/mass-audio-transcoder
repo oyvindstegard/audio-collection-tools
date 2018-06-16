@@ -22,8 +22,7 @@ def execute_work_unit(work_unit):
     source, destpath = work_unit
 
     try:
-        if not os.path.isdir(os.path.dirname(destpath)):
-            os.makedirs(os.path.dirname(destpath))
+        os.makedirs(os.path.dirname(destpath), exist_ok=True)
     except Exception as e:
         LOG.warn("Failed to create destination directory '{}': {}".format(os.path.dirname(destpath), str(e)))
         return 1
