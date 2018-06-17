@@ -398,7 +398,7 @@ def tag_variable_resolver(source):
             return source.playlist_name
         elif var == 'playlist_filenumber':
             if source.playlist_filenumber and source.playlist_totalfiles:
-                return zeropad(source.playlist_filenumber, source.playlist_totalfiles)
+                return zeropad(source.playlist_filenumber, len(str(source.playlist_totalfiles)))
             else:
                 return None
         elif var == 'playlist_totalfiles':
