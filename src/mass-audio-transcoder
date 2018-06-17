@@ -49,8 +49,8 @@ def execute_work_unit(work_unit):
 
         LOG.info('ffmpeg {}'.format(destpath))
         try:
-            with subprocess.Popen(['ffmpeg'] + ffmpeg_args,
-                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) as proc:
+            with subprocess.Popen(['ffmpeg'] + ffmpeg_args, stdin=subprocess.DEVNULL,
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) as proc:
 
                 returncode = proc.wait()
                 if returncode != 0:

@@ -129,7 +129,7 @@ def ffmpeg_check_version():
     if not ffmpeg_path:
         raise CommandError("Missing '{}' command in system PATH".format(FFMPEG_EXECUTABLE))
 
-    output = subprocess.check_output([ffmpeg_path, '-version'])
+    output = subprocess.check_output([ffmpeg_path, '-nostdin', '-version'])
     vmatch = re.search(r'^ffmpeg version ([^\s]+)', output.decode())
     if vmatch:
         return vmatch.group(1)
@@ -137,7 +137,7 @@ def ffmpeg_check_version():
         raise CommandError("Unable to determine ffmpeg version for executable '{}'".format(ffmpeg_path))
 
 def ffmpeg_build_args(inputfile, outputfile, codec, transcode_quality=None, transcode_bitrate=None):
-    args = ['-i', inputfile, '-y']
+    args = ['-nostdin', '-i', inputfile, '-y']
     var_resolver = {'transcode_quality':transcode_quality, 'transcode_bitrate':transcode_bitrate}
 
     inputfiletype = get_normalized_extension(inputfile)
