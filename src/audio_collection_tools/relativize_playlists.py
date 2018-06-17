@@ -47,9 +47,9 @@ def relativize(filename, force_utf8, keep_original):
 
     plfile = open(os.path.abspath(filename), 'r', encoding='utf8')
     if os.path.dirname(filename) == '':
-        basedir = os.path.realpath(os.path.abspath('.'))
+        basedir = os.path.realpath('.')
     else:
-        basedir = os.path.realpath(os.path.abspath(os.path.dirname(filename)))
+        basedir = os.path.realpath(os.path.dirname(filename))
 
     try:
         os.chdir(basedir)
