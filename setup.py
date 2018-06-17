@@ -1,11 +1,12 @@
 import setuptools
+from src.audio_collection_tools import VERSION
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
     name="audio-collection-tools",
-    version="0.2",
+    version=VERSION,
     author="Øyvind Stegard",
     author_email="oyvind@stegard.net",
     description="Misc tools for transcoding audio collections",
