@@ -1,3 +1,3 @@
 # Audio Collection Tools common package
 
-VERSION = '0.3'
+VERSION = '0.4'

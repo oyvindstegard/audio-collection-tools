@@ -30,7 +30,10 @@ def execute_work_unit(work_unit):
     import signal
     signal.signal(signal.SIGINT, default_sigint_handler) # handle interrupts while working
 
-    if source.filetype() == FFMPEG_CODEC_EXT[source.transcode_spec.codec] and not source.transcode_spec.force_transcode:
+    codec = source.transcode_spec.codec
+
+    if (codec == 'copy') or (source.filetype() == FFMPEG_CODEC_EXT[codec]
+                             and not source.transcode_spec.force_transcode):
         LOG.info('copy   {}'.format(destpath))
         try:
             shutil.copy(source.filepath, destpath)
@@ -131,7 +134,7 @@ parser.add_argument('-o', '--overwrite', action='store_true',
                     files at destination paths.""", default=False)
 
 parser.add_argument('-c', '--codec', type=str, default='mp3', help="""
-                    Select audio codec.""",
+                    Select audio codec. Use 'copy' to transfer without transcoding.""",
                     choices=FFMPEG_CODEC_OPTS)
 
 quality_options = parser.add_mutually_exclusive_group(required=False)
@@ -178,6 +181,9 @@ if not os.access(args.destdir, os.W_OK):
     LOG.error('Destination not a writable directory: {}'.format(args.destdir))
     sys.exit(1)
 
+if args.force_transcode and args.codec == 'copy':
+    LOG.warn('Option -f/--force-transcode has no effect with codec \'copy\'')
+    
 LOG.info('Using ffmpeg version {}'.format(ffmpeg_check_version()))
 
 transcode_spec = TranscodeSpec(args.codec, args.force_transcode, args.quality, args.bitrate)

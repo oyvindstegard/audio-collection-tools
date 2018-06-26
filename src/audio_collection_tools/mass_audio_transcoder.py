@@ -31,14 +31,15 @@ FFMPEG_CODEC_OPTS = {'mp3':            ['-codec:a libmp3lame',
                      'fdkaac':         ['-map 0:a -codec:a libfdk_aac',
                                         '<-vbr +transcode_quality+> <-b:a +transcode_bitrate+k>'],
                      'vorbis':         ['-codec:a libvorbis',
-                                        '<-qscale:a +transcode_quality+> <-b:a +transcode_bitrate+k>']
+                                        '<-qscale:a +transcode_quality+> <-b:a +transcode_bitrate+k>'],
+                     'copy':[]
                      }
 
 # Ogg audio files have metadata attached to audio stream instead of
 # container, which makes a difference for ffmpeg.
 FFMPEG_INPUT_FILE_OPTS = {'ogg': ['-map_metadata 0:s:0']}
 
-FFMPEG_CODEC_EXT  = {'vorbis': 'ogg', 'mp3':'mp3', 'aac':'m4a', 'fdkaac':'m4a'}
+FFMPEG_CODEC_EXT  = {'vorbis': 'ogg', 'mp3':'mp3', 'aac':'m4a', 'fdkaac':'m4a', 'copy':'*'}
 FFMPEG_DEFAULT_CODEC = 'mp3'
 
 # Basic list of supported input formats. Other formats will work as long as both
@@ -478,7 +479,11 @@ def generate_dest_path(source, template, destdir):
         result = clean_path(os.path.join(source.parentdir_basename(), source.basename(False)))
         LOG.warn("Template expansion resulted in empty string for source file '{}', using fallback naming: '{}'".format(source.filepath, result))
 
-    ext = FFMPEG_CODEC_EXT[source.transcode_spec.codec]
+    if source.transcode_spec.codec != 'copy':
+        ext = FFMPEG_CODEC_EXT[source.transcode_spec.codec]
+    else:
+        ext = source.filetype()
+        
     if not result.endswith('.' + ext):
         result += '.' + ext
 
@@ -524,4 +529,3 @@ def prepare_dest_paths(sources, args):
             destpaths[destpath] = source
 
     return [(v, k) for k, v in destpaths.items()]
-        
