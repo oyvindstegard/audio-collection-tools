@@ -22,7 +22,6 @@ def write_pls(filename, audiofiles):
         
     pltitle = os.path.splitext(os.path.basename(filename))[0]
     f = open(filename, 'w', encoding='utf8')
-    sys.stdout.write('Writing PLS playlist: {} ({} audio files) ..\n'.format(filename, len(audiofiles)))
     f.write('[playlist]\n')
     for i, audiofile in enumerate(audiofiles, 1):
         filetitle = os.path.splitext(os.path.basename(audiofile))[0]
@@ -36,11 +35,9 @@ def write_pls(filename, audiofiles):
 
 def write_m3u(filename, audiofiles, utf8=True):
     if len(audiofiles) == 0:
-        sys.stdout.write('Not writing {}: no files\n'.format(filename))
         return
 
     f = open(filename, 'w', encoding=('utf8' if utf8 else 'latin1'))
-    sys.stdout.write('Writing M3U playlist \'{}\' ({} audio files) ..\n'.format(filename, len(audiofiles)))
     for path in audiofiles:
         f.write(path)
         f.write('\r\n')
@@ -143,8 +140,14 @@ def generate_playlist(plspec):
 
     os.chdir(cwd)
 
+    if len(audiofiles) == 0:
+        sys.stdout.write('Not writing {}: no files\n'.format(plspec.plfile))
+        return
+
     if plspec.plfile.endswith('m3u'):
         try:
+            sys.stdout.write('Writing M3U playlist \'{}\' ({} audio files) ..\n'.format(
+                plspec.plfile, len(audiofiles)))
             write_m3u(plspec.plfile, audiofiles, utf8=plspec.force_utf8)
         except UnicodeEncodeError:
             message = """Error: M3U playlist '{}' could not be written using latin-1
@@ -156,8 +159,12 @@ This violates the spec, but may still work with many audio players.""".format(pl
             sys.stderr.write(textwrap.fill(message, width=termsize().columns) + '\n')
 
     elif plspec.plfile.endswith('m3u8'):
+        sys.stdout.write('Writing M3U8 playlist \'{}\' ({} audio files) ..\n'.format(
+            plspec.plfile, len(audiofiles)))
         write_m3u(plspec.plfile, audiofiles, utf8=True)
     elif plspec.plfile.endswith('pls'):
+        sys.stdout.write('Writing PLS playlist: {} ({} audio files) ..\n'.format(
+            plspec.plfile, len(audiofiles)))
         write_pls(plspec.plfile, audiofiles)
     else:
         raise ValueError('Unknown playlist format: {}'.format(plspec.plfile))

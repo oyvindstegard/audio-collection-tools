@@ -6,26 +6,57 @@
 # Mass parallel Audio Transcoder ffmpeg frontend.
 # Copyright 2018, Øyvind Stegard <oyvind@stegard.net>
 #
-# Requires: Python 3, python-mutagen and a recent-ish (2017/18) ffmpeg command
-# in PATH.
-#
+# Requires: Python 3, python-mutagen and a recent-ish (2017/18) ffmpeg
+# command in PATH.
 
 from audio_collection_tools import *
 from audio_collection_tools.mass_audio_transcoder import *
+from audio_collection_tools.generate_playlists import write_pls, write_m3u
 
 import multiprocessing
 import shutil
-        
-def execute_work_unit(work_unit):
-    """Executes work unit, typically this function expects to be called in a sub process."""
 
-    source, destpath = work_unit
+def get_playlist_targetpaths_map(work_units):
+    """Returns map of playlist input files to list of target paths."""
+    val = {}
+    for wu in work_units:
+        if wu.source.playlist_file:
+            val.setdefault(wu.source.playlist_file, []).append(wu.targetpath)
+
+    return val            
+
+def write_playlist_files(work_units, destdir):
+    """Write any playlist files in work unit list to destination."""
+    playlist_map = get_playlist_targetpaths_map(work_units)
+    for playlist_file in playlist_map:
+        destdir = os.path.realpath(destdir)
+        playlist_dest = os.path.join(destdir, os.path.basename(playlist_file))
+        playlist_paths = [os.path.relpath(filepath, destdir) for filepath in playlist_map[playlist_file]]
+        LOG.info('Writing playlist {} ..'.format(playlist_dest))
+        if is_pls_playlist(playlist_file):
+            write_pls(playlist_dest, playlist_paths)
+        elif is_m3u_playlist(playlist_file):
+            write_m3u(playlist_dest, playlist_paths, True)
+        else:
+            raise ApplicationError('Cannot write such playlists: {}'.format(playlist_file))
+
+def execute_work_unit(work_unit):
+    """Executes work unit, typically this function expects to be called in a sub process.
+
+    Returns the work_unit with updated status.
+    """
+
+    if work_unit.status is not Status.READY:
+        return work_unit
+
+    source, targetpath = work_unit.source, work_unit.targetpath
 
     try:
-        os.makedirs(os.path.dirname(destpath), exist_ok=True)
+        os.makedirs(os.path.dirname(targetpath), exist_ok=True)
     except Exception as e:
-        LOG.warn("Failed to create destination directory '{}': {}".format(os.path.dirname(destpath), str(e)))
-        return 1
+        LOG.warn("Failed to create target directory '{}': {}".format(os.path.dirname(targetpath), str(e)))
+        work_unit.status = Status.FAILED_IO
+        return work_unit
 
     import signal
     signal.signal(signal.SIGINT, default_sigint_handler) # handle interrupts while working
@@ -34,43 +65,46 @@ def execute_work_unit(work_unit):
 
     if (codec == 'copy') or (source.filetype() == FFMPEG_CODEC_EXT[codec]
                              and not source.transcode_spec.force_transcode):
-        LOG.info('copy   {}'.format(destpath))
+        LOG.info('copy   {}'.format(targetpath))
         try:
-            shutil.copy(source.filepath, destpath)
-            returncode = 0
+            shutil.copy(source.filepath, targetpath)
+            work_unit.status = Status.COMPLETED
         except KeyboardInterrupt:
+            work_unit.status = Status.FAILED_ABORTED
             LOG.info('Shutdown.')
-            returncode = 1
         except Exception as e:
-            LOG.warn("Failed to copy '{}' to '{}': {}".format(source.filepath, destpath, str(e)))
-            returncode = 1
+            work_unit.status = Status.FAILED_IO
+            LOG.warn("Failed to copy '{}' to '{}': {}".format(source.filepath, targetpath, str(e)))
     else:
-        ffmpeg_args = ffmpeg_build_args(source.filepath, destpath, source.transcode_spec.codec,
+        ffmpeg_args = ffmpeg_build_args(source.filepath, targetpath, source.transcode_spec.codec,
                                         source.transcode_spec.quality,
                                         source.transcode_spec.bitrate)
         LOG.debug(ffmpeg_args)
 
-        LOG.info('ffmpeg {}'.format(destpath))
+        LOG.info('ffmpeg {}'.format(targetpath))
         try:
             with subprocess.Popen(['ffmpeg'] + ffmpeg_args, stdin=subprocess.DEVNULL,
                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) as proc:
 
                 returncode = proc.wait()
                 if returncode != 0:
+                    work_unit.status = Status.FAILED_FFMPEG
                     LOG.warn("ffmpeg failed for input '{}' with code {}".format(source.filepath, returncode))
                     LOG.warn("ffmpeg command was: '{}'".format(" ".join(['ffmpeg'] + ffmpeg_args)))
+                else:
+                    work_unit.status = Status.COMPLETED
                     
         except KeyboardInterrupt:
+            work_unit.status = Status.FAILED_ABORTED
             LOG.info('Shutdown.')
-            returncode = 1
         except Exception as e:
+            work_unit.status = Status.FAILED_FFMPEG
             LOG.warn("Failed to execute ffmpeg for input '{}': {}".format(source.filepath, str(e)))
             LOG.warn("ffmpeg command was: '{}'".format(" ".join(['ffmpeg'] + ffmpeg_args)))
-            returncode = 1
 
     signal.signal(signal.SIGINT, signal.SIG_IGN) # ignore interrupts while idle
 
-    return returncode
+    return work_unit
 
 
 import argparse
@@ -102,25 +136,25 @@ parser.add_argument('destdir', metavar='DESTDIR', type=str,
                     help="""Destination root directory. Paths and
                     files under this directory will be generated
                     based on templates with data from audio file
-                    tags and playlist names. """)
+                    tags and playlist names.""")
 
 parser.add_argument('--help-templates', action='store_true',
                     dest='help_templates', help="""Show help for templates""")
 
 parser.add_argument('-t', '--template', type=str, dest='template',
-                    help="""Select template for audio files that
-                    are not part of playlists. """,
+                    help="""Select naming template for audio files that
+                    are not part of playlists.""",
                     default=DEFAULT_TEMPLATE)
 
 parser.add_argument('-p', '--playlist-template', type=str,
                     dest='playlist_template', help="""Select
-                    template for files that are part of
+                    naming template for files that are part of
                     playlists.""",
                     default=DEFAULT_TEMPLATE_PLAYLIST)
 
 parser.add_argument('-d', '--dry', action='store_true',
                     dest='dry', help="""Dry run, only show input
-                    files and destinations, do not actually do any
+                    files and targets, do not actually do any
                     transcoding.""")
 
 parser.add_argument('-f', '--force-transcode',
@@ -155,12 +189,12 @@ parser.add_argument('-v', '--version', action='version', version=VERSION)
 args = parser.parse_args()
 
 if args.help_templates:
-    doc = """Templates are used for naming transcoded destination files automatically.
+    doc = """Templates are used for naming transcoded target files automatically.
 
     One template is used for audio files that are not part of any
-    playlist, and other one for playlists. Template values should
-    never include file extension, which is handled automatically
-    and depends on destination format.
+    playlist, and another one for playlists. Template values should
+    never include file extension, which is handled automatically and
+    depends on the target format/codec.
 
     Documentation from the template expansion function follows.
 
@@ -193,11 +227,8 @@ for inputfile in args.inputs:
     LOG.info("Scanning input {} ..".format(inputfile))
     if is_playlist(inputfile):
         paths = get_audiofile_paths_from_playlist(inputfile)
-        pltitle = os.path.splitext(os.path.basename(inputfile))[0]
-        plsources = [Source(path, transcode_spec, pltitle, n, len(paths)) for n, path in enumerate(paths, 1)]
-
+        plsources = [Source(path, transcode_spec, inputfile, n, len(paths)) for n, path in enumerate(paths, 1)]
         sources.extend(plsources)
-
     else:
         paths = get_audiofile_paths(inputfile)
         sources.extend([Source(path, transcode_spec) for path in paths])
@@ -211,13 +242,14 @@ if len(sources) == 0:
     sys.exit(0)
 
 LOG.info('Sources provided a total of {} audio files'.format(len(sources)))
-LOG.info('Preparing destination paths ..')
-work_units = prepare_dest_paths(sources, args)
+LOG.info('Preparing target paths ..')
+work_units = prepare_work_units(sources, args.destdir,
+                                args.template, args.playlist_template, args.overwrite)
 
 if args.dry:
-    LOG.info('Dry run only, files to transcode:')
+    LOG.info('Dry run only, target paths and status:')
     for work_unit in work_units:
-        print('{} -> {}'.format(work_unit[0].filepath, work_unit[1]))
+        print("{}, {}".format(work_unit.targetpath, work_unit.status))
     sys.exit(0)
 
 LOG.info('Starting work ..')
@@ -233,13 +265,17 @@ def pool_worker_init():
 
 with multiprocessing.Pool(multiprocessing.cpu_count(), pool_worker_init) as pool:
     try:
-        results = pool.map_async(execute_work_unit, work_units).get()
-
-        failed = sum(map(lambda n: 1 if n > 0 else 0, results))
-        skipped = len(sources) - len(results)
-        LOG.info('Finished, {} transcodings succeeded, {} failed, {} skipped.'.format(
-            len(results)-failed, failed, skipped))
+        work_units = pool.map_async(execute_work_unit, work_units).get()
+        failed = sum(map(lambda wu: 1 if wu.status.is_failed() else 0, work_units))
+        skipped = sum(map(lambda wu: 1 if wu.status.is_skipped() else 0, work_units))
+        completed = sum(map(lambda wu: 1 if wu.status.is_completed() else 0, work_units))
+        LOG.info('{} transcodings completed, {} failed, {} skipped.'.format(completed, failed, skipped))
 
     except KeyboardInterrupt:
         LOG.warn('User interrupt')
         sys.exit(130)
+
+# Write any playlist files
+write_playlist_files(work_units, args.destdir)
+
+LOG.info('Finished.')

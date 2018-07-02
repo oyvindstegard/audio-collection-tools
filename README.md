@@ -10,8 +10,9 @@ attempt at Python 2 compatibility is made by the author, even though
 it may not require much work.
 
 Only tested in unix-like environments, you mileage on the Windows
-platform may vary. (Pull-reqs that fix compatibility issues are welcome
-of course.)
+platform may vary. However, the code is free of shell interpreted
+command execution and platform specifics in that regard. (Pull-reqs
+that fix compatibility issues are welcome.)
 
 ## Requirements
 
@@ -42,29 +43,91 @@ processes.
 
 It will also accept playlists as input and will transcode all files
 referenced in the playlist to a target location. For playlists, the
-default template will cause the files to be located under a single
-directory named after the playlist file and use filenames which order
-them like the order in the original playlist. This will make playlists
-transferable to devices which don't really understand normal playlist
-files.
+default template will cause the files to be located under a directory
+named after the playlist file and use filenames which order them like
+the order in the original playlist. This will make playlists
+compatible with devices that don't really understand normal playlist
+files. To use playlists just as sources for audio files, change the
+template to be the same as for regular inputs, see options
+`--playlist-template` and `--template`. All playlists provided as
+input arguments are also written to the target root directory, with
+contents updated to reflect the paths of the transcoded files instead
+of the originals.
 
-See
+See:
 
     $ mass-audio-transcoder --help
     
-for more details.
+and examples below for more details.
 
+#### Naming templates
 
-#### Usage example: creating an MP3 mirror of an existing audio collection
+Target file paths are named according to templates.
+
+The default naming templates for audio files that are not sourced from
+a playlist are:
+
+    <albumartist_or_artist>< - +album+>/<track+. ><title>
+    
+Template variables are enclosed in "<..>" and will typically be
+metadata from audio file tags, such as in the default template shown
+above. For details about this syntax, see `mass-audio-transcoder
+--help-templates`.
+
+The default naming template for audio files that are sourced from
+playlists is:
+
+    <playlist_name>/<playlist_filenumber>. <title> - <artist>
+    
+This causes a top level directory named after the playlist file to be
+created, and all audio files referenced in the playlist will have
+their transcoded target files placed under that directory. They will
+be numbered according to their number in the source playlist.
+
+#### Example 1: creating an MP3 mirror of an existing audio collection
 
     $ mkdir /tmp/my-music-mp3
-    $ mass-audio-transcoder -c mp3 /my-music-collection/ /tmp/my-music-mp3/
+    $ mass-audio-transcoder /my-music-collection/ /tmp/my-music-mp3/
 
 This requires that the source audio collection files have meta tags
 attached to them, since the meta data determines the destination
 directory structure based on a naming template.
 
-#### TODO more examples
+The default codec is MP3. Other available codecs are AAC, Vorbis and a
+special codec 'copy' which does no transcoding at all.
+
+#### Example 2: copy all audio files referenced in multiple playlists
+
+    $ mkdir /tmp/playlists-and-files
+    $ mass-audio-transcoder -c copy ~/Music/list1.pls ~/Music/list2.m3u ~/Music/favorites.m3u \
+      /tmp/playlists-and-files/
+
+This will copy all audio files referenced in the provided playlists to
+a new structure under the target location. Since we're using `-c
+copy`, no transcoding will occur. Each playlist will get its own top
+level directory, and the playlist files will be copied into these
+directories (default playlist naming template). Finally, the playlist
+files themselves will be generated in the target directory.
+
+If two or more lists reference some of the same files, this will cause
+the audio files to be duplicated into the different playlist folders,
+since the default play. See example 3 to avoid this.
+
+#### Example 3: copy audio files in playlists, but use standard file structure
+
+    $ mkdir /tmp/playlists-and-files
+    $ mass-audio-transcoder -c copy --playlist-template '<albumartist_or_artist>< - +album+>/<track+. ><title>' \
+                            ~/Music/list1.pls ~/Music/list2.m3u ~/Music/favorites.m3u \
+                            /tmp/playlists-and-files/
+                            
+This will copy all audio files referenced in the playlists to the
+target location using a naming template which structures the audio
+files in artist-album-folders at the top level (the default template
+for audio files and directory sources). In this case, if the same
+audio file is referenced by multiple playlists, it will cause a naming
+collision warning, and the file will only be transcoded once, which is
+typically desirable. The playlists generated in the target directory
+will still reference all the files properly.
 
 
 ### generate-playlists
@@ -76,7 +139,7 @@ on various criteria.
 For instance, by filtering on a genre regexp, you can automatically
 make genre-focused playlists from a larger collection.
 
-See
+See:
 
     $ generate-playlists --help
     
@@ -97,7 +160,7 @@ This tool can relativize the file paths in a playlist. This makes the
 playlist more portable, e.g. when music collection is shared on a
 network or moved to a different location.
 
-See
+See:
 
     $ relativize-playlists --help
     
@@ -129,9 +192,9 @@ the base directory of the project:
   http://python-packaging.readthedocs.io/en/latest/command-line-scripts.html
 - Refactor out common code from the tools into a common module.
 - Add tests for `audio_collection_tools/mass_audio_transcoder.py`.
-- Add option to `mass-audio-transcoder` which will structure
-  destination files according to the structure of the sources
-  (regardless of tag metadata).
+- Add option to `mass-audio-transcoder` which will structure target
+  files according to the structure of the sources (regardless of tag
+  metadata).
 
 ## License
 

@@ -176,6 +176,9 @@ def is_m3u_playlist(filename):
 def is_playlist(filename):
     return is_pls_playlist(filename) or is_m3u_playlist(filename)
 
+def get_playlist_name(filename):
+    return os.path.splitext(os.path.basename(filename))[0]
+
 def extract_pls_paths(plfile):
     """Extract audio file paths from PLS playlist. Argument must be open file handle."""
     paths = []
@@ -396,7 +399,7 @@ def tag_variable_resolver(source):
         elif var == 'totalfiles':
             return str(source.totalfiles)
         elif var == 'playlist_name':
-            return source.playlist_name
+            return get_playlist_name(source.playlist_file) if source.playlist_file else None
         elif var == 'playlist_filenumber':
             if source.playlist_filenumber and source.playlist_totalfiles:
                 return zeropad(source.playlist_filenumber, len(str(source.playlist_totalfiles)))
@@ -414,6 +417,29 @@ def tag_variable_resolver(source):
 
     return resolver
 
+from enum import Enum, auto
+class Status(Enum):
+    """Processing status"""
+    INIT = auto()
+    READY = auto()
+    SKIPPED_NAME_COLLISION = auto()
+    SKIPPED_TARGETPATH_EXISTS = auto()
+    SKIPPED_TARGETPATH_EQ_SOURCEPATH = auto()
+    SKIPPED_GENERATE_TARGETPATH = auto()
+    FAILED_ABORTED = auto()
+    FAILED_FFMPEG = auto()
+    FAILED_IO = auto()
+    COMPLETED = auto()
+
+    def is_failed(self):
+        return self.name.startswith('FAILED')
+
+    def is_skipped(self):
+        return self.name.startswith('SKIPPED')
+
+    def is_completed(self):
+        return self is Status.COMPLETED
+    
 class TranscodeSpec:
     """Transcoding options"""
     def __init__(self, codec, force_transcode, quality=None, bitrate=None):
@@ -423,16 +449,20 @@ class TranscodeSpec:
         self.bitrate = bitrate
 
 class Source:
-    """Represents an audio file source (unit of transcoding work)."""
+    """Represents an audio file source (unit of transcoding work). Also
+    holds some contextual info about playlist, if file is part of a
+    playlist.
+
+    """
     def __init__(self, filepath, transcode_spec,
-                 playlist_name=None, playlist_filenumber=None, playlist_totalfiles=None):
+                 playlist_file=None, playlist_filenumber=None, playlist_totalfiles=None):
         self.filepath = filepath
         self.transcode_spec = transcode_spec
 
         self.filenumber = -1
         self.totalfiles = -1
 
-        self.playlist_name = playlist_name
+        self.playlist_file = playlist_file
         self.playlist_filenumber = playlist_filenumber
         self.playlist_totalfiles = playlist_totalfiles
 
@@ -455,16 +485,27 @@ class Source:
         return os.path.basename(os.path.dirname(self.filepath))
 
     def __str__(self):
-        template = 'Source{{ {}, filenumber={}, totalfiles={}'
-        if self.playlist_name:
-            template += ', playlist_name={}, playlist_filenumber={}, playlist_totalfiles={}'
+        template = 'Source{{{}, filenumber={}, totalfiles={}'
+        if self.playlist_file:
+            template += ', playlist_file={}, playlist_filenumber={}, playlist_totalfiles={}'
+        template += '}}'
 
         return template.format(self.filepath, self.filenumber, self.totalfiles,
-                               self.playlist_name, self.playlist_filenumber, self.playlist_totalfiles)
+                               self.playlist_file, self.playlist_filenumber, self.playlist_totalfiles)
 
+class WorkUnit:
+    """Unit of work, a source, a target file and processing status."""
+    def __init__(self, source, status=Status.INIT, targetpath=None):
+        self.source = source
+        self.status = Status
+        self.targetpath = targetpath
 
-def generate_dest_path(source, template, destdir):
-    """Creates destination path up to and including the final directory.
+    def __str__(self):
+        return "WorkUnit{{source: {}, status: {}, targetpath: {}}}".format(
+            str(self.source), str(self.status), str(self.targetpath))
+
+def generate_target_path(source, template, destdir):
+    """Creates target path up to and including the final directory.
 
     If the template and cleanups result in an empty string, a fallback
     is used where the original filename and parent directory are used
@@ -495,37 +536,48 @@ def generate_dest_path(source, template, destdir):
 
     return abspath
 
-def prepare_dest_paths(sources, args):
-    """Returns a list of 2-element tuples, where first element is the
-    source and the second element is the generated destination path.
+def prepare_work_units(sources, destdir, naming_template, playlist_naming_template, allow_overwrite):
+    """Returns a list of WorkUnit instances.
 
-    Checks input material for naming collisions and other problems in
-    the process.
+    Checks input material for naming collisions and other problems.
 
-     which cannot be executed, for various reasons, are
-    logged and not included in the returned list.
+    Work units which cannot be executed, for various reasons, are
+    given an appropriate status and logged.
+
     """
 
-    destpaths = OrderedDict()
+    targetpaths = {}
+    work_units = []
     for source in sources:
-        template = args.template if not source.playlist_name else args.playlist_template
-        destpath = generate_dest_path(source, template, args.destdir)
-        if not destpath:
+        work_unit = WorkUnit(source)
+        work_units.append(work_unit)
+
+        template = naming_template if not source.playlist_file else playlist_naming_template
+        targetpath = generate_target_path(source, template, destdir)
+        if not targetpath:
+            work_unit.status = Status.SKIPPED_GENERATE_TARGETPATH
+            continue
+        
+        work_unit.targetpath = targetpath
+
+        if source.filepath == targetpath:
+            work_unit.status = Status.SKIPPED_TARGETPATH_EQ_SOURCEPATH
+            LOG.warn("Source file '{}' has itself as target, skipping.".format(source.filepath))
+            continue
+        
+        if not allow_overwrite and os.path.exists(targetpath):
+            work_unit.status = Status.SKIPPED_TARGETPATH_EXISTS
+            LOG.warn("Source file '{}' has target path '{}' which already exists and overwrite is off, skipping".format(source.filepath, targetpath))
             continue
 
-        if source.filepath == destpath:
-            LOG.warn("Source file '{}' has itself as destination, skipping.".format(source.filepath))
-            continue
-
-        if not args.overwrite and os.path.exists(destpath):
-            LOG.warn("Source file '{}' has destination path '{}' which already exists and overwrite is off, skipping".format(source.filepath, destpath))
-            continue
-    
-        if destpath in destpaths:
-            processed_source = destpaths[destpath]
-            LOG.warn("Naming collision between sources '{}' and '{}' for dest path '{}', skipping".format(processed_source.filepath, source.filepath, destpath))
+        if targetpath in targetpaths:
+            work_unit.status = Status.SKIPPED_NAME_COLLISION
+            colliding_source = targetpaths[targetpath];
+            LOG.warn("Naming collision between sources '{}' and '{}' for target path '{}', skipping".format(colliding_source.filepath, source.filepath, targetpath))
             continue
         else:
-            destpaths[destpath] = source
+            targetpaths[targetpath] = source
 
-    return [(v, k) for k, v in destpaths.items()]
+        work_unit.status = Status.READY
+
+    return work_units
