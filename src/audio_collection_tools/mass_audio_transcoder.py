@@ -284,7 +284,7 @@ def expand_template(template, variable_resolver, allow_slash_in_var_values=True)
     Syntax:
     'Some template with <thisvar>, <thatvar+suffix> and <prefix+othervar+suffix>'
 
-    When plus chars (+) are used, it denotes a suffix/prefix that
+    When plus chars (+) are used, it denotes a literal suffix/prefix that
     should only be included if the value exists. (Some audio files may
     lack tags, etc.).
 
@@ -501,7 +501,7 @@ class WorkUnit:
         self.targetpath = targetpath
 
     def __str__(self):
-        return "WorkUnit{{source: {}, status: {}, targetpath: {}}}".format(
+        return "WorkUnit{{{}, status: {}, targetpath: {}}}".format(
             str(self.source), str(self.status), str(self.targetpath))
 
 def generate_target_path(source, template, destdir):

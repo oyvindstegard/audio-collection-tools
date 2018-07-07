@@ -46,11 +46,11 @@ referenced in the playlist to a target location. For playlists, the
 default template will cause the files to be located under a directory
 named after the playlist file and use filenames which order them like
 the order in the original playlist. This will make playlists
-compatible with devices that don't really understand normal playlist
-files. To use playlists just as sources for audio files, change the
-template to be the same as for regular inputs, see options
-`--playlist-template` and `--template`. All playlists provided as
-input arguments are also written to the target root directory, with
+compatible with devices and players that do not really understand
+normal playlist files. To use playlists just as sources for audio
+files, change the template to be the same as for regular inputs, see
+options `--playlist-template` and `--template`. All playlists provided
+as input arguments are also written to the target root directory, with
 contents updated to reflect the paths of the transcoded files instead
 of the originals.
 
@@ -62,7 +62,9 @@ and examples below for more details.
 
 #### Naming templates
 
-Target file paths are named according to templates.
+Target file paths are named according to templates. The templates may
+introduce structure in the form of sub directories by including
+slashes (directory separators).
 
 The default naming templates for audio files that are not sourced from
 a playlist are:
@@ -71,8 +73,8 @@ a playlist are:
     
 Template variables are enclosed in "<..>" and will typically be
 metadata from audio file tags, such as in the default template shown
-above. For details about this syntax, see `mass-audio-transcoder
---help-templates`.
+above. For details about this syntax and the available variables, see
+`mass-audio-transcoder --help-templates`.
 
 The default naming template for audio files that are sourced from
 playlists is:
