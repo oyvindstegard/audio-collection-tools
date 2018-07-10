@@ -417,19 +417,19 @@ def tag_variable_resolver(source):
 
     return resolver
 
-from enum import Enum, auto
+from enum import Enum
 class Status(Enum):
     """Processing status"""
-    INIT = auto()
-    READY = auto()
-    SKIPPED_NAME_COLLISION = auto()
-    SKIPPED_TARGETPATH_EXISTS = auto()
-    SKIPPED_TARGETPATH_EQ_SOURCEPATH = auto()
-    SKIPPED_GENERATE_TARGETPATH = auto()
-    FAILED_ABORTED = auto()
-    FAILED_FFMPEG = auto()
-    FAILED_IO = auto()
-    COMPLETED = auto()
+    INIT = 0
+    READY = 1
+    SKIPPED_NAME_COLLISION = 2
+    SKIPPED_TARGETPATH_EXISTS = 3
+    SKIPPED_TARGETPATH_EQ_SOURCEPATH = 4
+    SKIPPED_GENERATE_TARGETPATH = 5
+    FAILED_ABORTED = 6
+    FAILED_FFMPEG = 7
+    FAILED_IO = 8
+    COMPLETED = 9
 
     def is_failed(self):
         return self.name.startswith('FAILED')
