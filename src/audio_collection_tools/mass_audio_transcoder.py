@@ -286,7 +286,7 @@ def expand_template(template, variable_resolver, allow_slash_in_var_values=True)
 
     When plus chars (+) are used, it denotes a literal suffix/prefix that
     should only be included if the value exists. (Some audio files may
-    lack tags, etc.).
+    lack tags, etc.)
 
     Literal angle brackets cannot be used at all in templates, and
     plus chars cannot be used in suffix or prefix inside a variable
