@@ -42,10 +42,11 @@ def relativize_pls(basedir, infile, outfile):
 
         outfile.write(line)
 
-def relativize(filename, force_utf8, keep_original):
+def relativize(filename, force_utf8, keep_original, preserve_mtime):
     invokedir = os.getcwd()
 
     plfile = open(os.path.abspath(filename), 'r', encoding='utf8')
+    times = (os.path.getatime(filename), os.path.getmtime(filename))
     if os.path.dirname(filename) == '':
         basedir = os.path.realpath('.')
     else:
@@ -75,7 +76,10 @@ def relativize(filename, force_utf8, keep_original):
             print('Wrote relativized playlist file: {}'.format(tmpfile.name))
         else:
             os.rename(os.path.basename(tmpfile.name), os.path.basename(plfile.name))
+            if preserve_mtime:
+                os.utime(plfile.name, times)
             print('Relativized playlist file: {}'.format(plfile.name))
+
 
     except UnicodeDecodeError as u:
         print('Character decoding error for playlist: {}, consider using option --force-utf8 if the file is .m3u'.format(filename))

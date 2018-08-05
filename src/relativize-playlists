@@ -19,12 +19,17 @@ parser = argparse.ArgumentParser(
 
 parser.add_argument('filenames', metavar='FILE', type=str, nargs='+',
                     help='Playlist.pls [Playlist2.m3u ..]')
-parser.add_argument('-u', '--force-utf8', action='store_true', dest='force_utf8', default=False,
-                    help="""Force use of UTF-8 encoding for .m3u
-                    playlists, which applies to both reading and
-                    writing. For .pls and .m3u8 playlists, UTF-8
-                    encoding is always used regardless of this
-                    option.""")
+parser.add_argument('-u', '--force-utf8', action='store_true',
+                    dest='force_utf8', default=False, help="""Force
+                    use of UTF-8 encoding for .m3u playlists, which
+                    applies to both reading and writing. For .pls and
+                    .m3u8 playlists, UTF-8 encoding is always used
+                    regardless of this option.""")
+
+parser.add_argument('-m', '--preserve-mtime', action='store_true',
+                    dest='preserve_mtime', default=False,
+                    help="""Preserve the original modification and
+                    access times of playlist files operated upon.""")
 
 parser.add_argument('-k', '--keep', action='store_true',
                     dest='keep_original', default=False,
@@ -36,4 +41,4 @@ parser.add_argument('-v', '--version', action='version', version=VERSION)
 
 args = parser.parse_args()
 for filename in args.filenames:
-    relativize(filename, args.force_utf8, args.keep_original)
+    relativize(filename, args.force_utf8, args.keep_original, args.preserve_mtime)
