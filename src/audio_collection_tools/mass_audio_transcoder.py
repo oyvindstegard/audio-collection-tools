@@ -23,16 +23,16 @@ import multiprocessing
 # ffmpeg option templates for various transcoding targets
 # for AAC targets, disable album art copying, since it's unreliable with ffmpeg
 FFMPEG_EXECUTABLE = 'ffmpeg'
-FFMPEG_CODEC_OPTS = {'mp3':            ['-codec:a libmp3lame',
-                                        '<-qscale:a +transcode_quality+> <-b:a +transcode_bitrate+k>',
-                                        '-id3v2_version 3'],
-                     'aac':            ['-map 0:a -codec:a aac',
-                                        '<-vbr +transcode_quality+> <-b:a +transcode_bitrate+k>'],
-                     'fdkaac':         ['-map 0:a -codec:a libfdk_aac',
-                                        '<-vbr +transcode_quality+> <-b:a +transcode_bitrate+k>'],
-                     'vorbis':         ['-codec:a libvorbis',
-                                        '<-qscale:a +transcode_quality+> <-b:a +transcode_bitrate+k>'],
-                     'copy':[]
+FFMPEG_CODEC_OPTS = {'mp3':      ['-codec:a libmp3lame',
+                                  '<-qscale:a +transcode_quality+> <-b:a +transcode_bitrate+k>',
+                                  '-id3v2_version 3'],
+                     'aac':      ['-map 0:a -codec:a aac',
+                                  '<-vbr +transcode_quality+> <-b:a +transcode_bitrate+k>'],
+                     'fdkaac':   ['-map 0:a -codec:a libfdk_aac',
+                                  '<-vbr +transcode_quality+> <-b:a +transcode_bitrate+k>'],
+                     'vorbis':   ['-codec:a libvorbis',
+                                  '<-qscale:a +transcode_quality+> <-b:a +transcode_bitrate+k>'],
+                     'copy':     []
                      }
 
 # Ogg audio files have metadata attached to audio stream instead of

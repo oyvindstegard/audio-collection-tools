@@ -51,7 +51,7 @@ def write_playlist_files(work_units, destdir, overwrite=False, playlist_format=N
         else:
             raise ApplicationError('Cannot write such playlists: {}'.format(playlist_file))
 
-def scan_inputs(inputs, transcode_spec):
+def scan_inputs(inputs, transcode_spec, no_transcode_for=None):
     """Scans list of inputs and returns a list of Source instances."""
     sources = []
     for inputfile in inputs:
@@ -67,6 +67,10 @@ def scan_inputs(inputs, transcode_spec):
     for n, source in enumerate(sources, 1):
         source.filenumber = n
         source.totalfiles = len(sources)
+
+        # Apply any no-transcode-for option
+        if no_transcode_for is not None and source.filetype() in no_transcode_for:
+            source.transcode_spec = TranscodeSpec('copy', False)
 
     return sources
     
@@ -247,6 +251,12 @@ if __name__ == '__main__':
                         is already in the same format as target file.
                         Useful if lowering quality for smaller file sizes.""")
 
+    parser.add_argument('-n', '--no-transcode-for', metavar='EXT', type=str, action='append',
+                        dest='no_transcode_for', help="""Input file extension to
+                        avoid transcoding, such audio files will just be copied
+                        instead. Option can occur more than once for multiple
+                        file types.""")
+
     parser.add_argument('-o', '--overwrite', action='store_true',
                         dest='overwrite', help="""Overwrite existing
                         files at destination paths.""", default=False)
@@ -286,12 +296,15 @@ if __name__ == '__main__':
 
     if args.force_transcode and args.codec == 'copy':
         LOG.warn('Option -f/--force-transcode has no effect with codec \'copy\'')
+
+    if args.force_transcode and args.no_transcode_for:
+        LOG.warn('Option -n/--no-transcode-for overrides option -f/--force-transcode')
         
     LOG.info('Using ffmpeg version {}'.format(ffmpeg_check_version()))
 
     transcode_spec = TranscodeSpec(args.codec, args.force_transcode, args.quality, args.bitrate)
 
-    sources = scan_inputs(args.inputs, transcode_spec)
+    sources = scan_inputs(args.inputs, transcode_spec, args.no_transcode_for)
     if len(sources) == 0:
         LOG.info('No input audio files found, nothing to do, goodbye.')
         sys.exit(0)

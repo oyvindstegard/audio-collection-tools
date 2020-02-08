@@ -15,11 +15,11 @@ setuptools.setup(
     url="https://github.com/oyvindstegard/audio-collection-tools/",
     packages=setuptools.find_packages('src'),
     package_dir={'':'src'},
-    classifiers=(
+    classifiers=[
         "Environment :: Console",
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: GNU General Public License (GPL)"
-    ),
+    ],
     scripts=[
         "src/mass-audio-transcoder",
         "src/generate-playlists",

@@ -168,10 +168,6 @@ See:
     
 for more details.
 
-#### Usage examples
-
-TODO
-
 ## Development, issues and contributing
 
 Bug reports and pull requests are welcome.
@@ -180,7 +176,7 @@ The tools have been developed in a Python 3 virtual environment, which
 is recommended. To setup such an environment, execute the following in
 the base directory of the project:
 
-    $ pyvenv venv-dev
+    $ python3 -m venv venv-dev
     $ source venv-dev/bin/activate
     $ python3 setup.py develop
 

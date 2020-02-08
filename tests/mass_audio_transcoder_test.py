@@ -65,6 +65,18 @@ def test_scan_inputs_pls_playlist(audio_tmpdir):
         assert source.playlist_totalfiles == 2
         assert source.playlist_file.endswith('pl/pl.pls')
 
+def test_scan_inputs_no_transcode_for(audio_tmpdir):
+    sources = scan_inputs([audio_tmpdir], TranscodeSpec('mp3', False), ['ogg'])
+
+    assert len(sources) == 10
+
+    for source in sources:
+        if source.filetype() == 'ogg':
+            assert source.transcode_spec.codec == 'copy' and source.transcode_spec.force_transcode == False
+        else:
+            assert source.transcode_spec.codec == 'mp3'
+
+
 # TODO:
 # - test target path generation
 # - test transcoding
