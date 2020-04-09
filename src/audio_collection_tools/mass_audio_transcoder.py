@@ -44,7 +44,7 @@ FFMPEG_DEFAULT_CODEC = 'mp3'
 
 # Basic list of supported input formats. Other formats will work as long as both
 # mutagen and ffmpeg understands how to decode them.
-INPUT_AUDIOFILE_PATTERNS = ['*.mp3', '*.ogg', '*.flac', '*.m4a', '*.wav']
+INPUT_AUDIOFILE_PATTERNS = ['*.mp3', '*.ogg', '*.flac', '*.m4a', '*.mpc', '*.wav']
 
 # Default templates for naming of transcoded files:
 DEFAULT_TEMPLATE = '<albumartist_or_artist>< - +album+>/<track+. ><title>'
@@ -66,7 +66,7 @@ class SynchronizedLog:
             self.log.debug(msg, *args, **kwargs)
     def warn(self, msg, *args, **kwargs):
         with self.lock:
-            self.log.warn(msg, *args, **kwargs)
+            self.log.warning(msg, *args, **kwargs)
     def error(self, msg, *args, **kwargs):
         with self.lock:
             self.log.error(msg, *args, **kwargs)
@@ -424,12 +424,13 @@ class Status(Enum):
     READY = 1
     SKIPPED_NAME_COLLISION = 2
     SKIPPED_TARGETPATH_EXISTS = 3
-    SKIPPED_TARGETPATH_EQ_SOURCEPATH = 4
-    SKIPPED_GENERATE_TARGETPATH = 5
-    FAILED_ABORTED = 6
-    FAILED_FFMPEG = 7
-    FAILED_IO = 8
-    COMPLETED = 9
+    SKIPPED_TARGETPATH_NEWER = 4
+    SKIPPED_TARGETPATH_EQ_SOURCEPATH = 5
+    SKIPPED_GENERATE_TARGETPATH = 6
+    FAILED_ABORTED = 7
+    FAILED_FFMPEG = 8
+    FAILED_IO = 9
+    COMPLETED = 10
 
     def is_failed(self):
         return self.name.startswith('FAILED')
@@ -439,6 +440,12 @@ class Status(Enum):
 
     def is_completed(self):
         return self is Status.COMPLETED
+
+class OverwriteMode(Enum):
+    """Overwrite modes"""
+    NO_OVERWRITE = 0
+    OVERWRITE = 1
+    OVERWRITE_IF_OLDER = 2
     
 class TranscodeSpec:
     """Transcoding options"""
@@ -536,7 +543,7 @@ def generate_target_path(source, template, destdir):
 
     return abspath
 
-def prepare_work_units(sources, destdir, naming_template, playlist_naming_template, allow_overwrite):
+def prepare_work_units(sources, destdir, naming_template, playlist_naming_template, overwritemode):
     """Returns a list of WorkUnit instances.
 
     Checks input material for naming collisions and other problems.
@@ -564,11 +571,6 @@ def prepare_work_units(sources, destdir, naming_template, playlist_naming_templa
             work_unit.status = Status.SKIPPED_TARGETPATH_EQ_SOURCEPATH
             LOG.warn("Source file '{}' has itself as target, skipping.".format(source.filepath))
             continue
-        
-        if not allow_overwrite and os.path.exists(targetpath):
-            work_unit.status = Status.SKIPPED_TARGETPATH_EXISTS
-            LOG.warn("Source file '{}' has target path '{}' which already exists and overwrite is off, skipping".format(source.filepath, targetpath))
-            continue
 
         if targetpath in targetpaths:
             work_unit.status = Status.SKIPPED_NAME_COLLISION
@@ -577,6 +579,16 @@ def prepare_work_units(sources, destdir, naming_template, playlist_naming_templa
             continue
         else:
             targetpaths[targetpath] = source
+
+        if os.path.exists(targetpath):
+            if overwritemode is OverwriteMode.NO_OVERWRITE:
+                work_unit.status = Status.SKIPPED_TARGETPATH_EXISTS
+                LOG.warn("Source file '{}' has target path '{}' which already exists and overwrite is off, skipping".format(source.filepath, targetpath))
+                continue
+            elif overwritemode is OverwriteMode.OVERWRITE_IF_OLDER and os.stat(targetpath).st_mtime >= os.stat(source.filepath).st_mtime:
+                work_unit.status = Status.SKIPPED_TARGETPATH_NEWER
+                LOG.warn("Source file '{}' has target path '{}' which already exists and is newer, skipping".format(source.filepath, targetpath))
+                continue
 
         work_unit.status = Status.READY
 

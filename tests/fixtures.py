@@ -25,3 +25,9 @@ def audio_tmpdir():
     shutil.copytree(audio_dir, audio_tmpdir)
     yield audio_tmpdir
     shutil.rmtree(tmpdir)
+
+@pytest.fixture(scope='function')
+def empty_tmpdir():
+    tmpdir = tempfile.mkdtemp()
+    yield tmpdir
+    shutil.rmtree(tmpdir)

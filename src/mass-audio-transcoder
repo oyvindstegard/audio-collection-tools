@@ -257,7 +257,11 @@ if __name__ == '__main__':
                         instead. Option can occur more than once for multiple
                         file types.""")
 
-    parser.add_argument('-o', '--overwrite', action='store_true',
+    parser.add_argument('-o', '--overwrite-if-older', action='store_true',
+                        dest='overwrite_if_older', help="""Overwrite existing
+                        files at destination paths if mtime is older than source.""", default=False)
+
+    parser.add_argument('-O', '--overwrite', action='store_true',
                         dest='overwrite', help="""Overwrite existing
                         files at destination paths.""", default=False)
 
@@ -287,8 +291,8 @@ if __name__ == '__main__':
         LOG.setLevel(logging.DEBUG)
 
     if not os.path.isdir(args.destdir):
-        LOG.error('Destination not a directory: {}'.format(args.destdir))
-        sys.exit(1)
+        os.makedirs(args.destdir)
+        LOG.info('Created destination directory: {}'.format(args.destdir))
 
     if not os.access(args.destdir, os.W_OK):
         LOG.error('Destination not a writable directory: {}'.format(args.destdir))
@@ -299,6 +303,16 @@ if __name__ == '__main__':
 
     if args.force_transcode and args.no_transcode_for:
         LOG.warn('Option -n/--no-transcode-for overrides option -f/--force-transcode')
+
+    if args.overwrite and args.overwrite_if_older:
+        LOG.error('Options -O/--overwrite and -o/--overwrite-if-older cannot be combined')
+        sys.exit(1)
+    elif args.overwrite:
+        overwrite_mode = OverwriteMode.OVERWRITE
+    elif args.overwrite_if_older:
+        overwrite_mode = OverwriteMode.OVERWRITE_IF_OLDER
+    else:
+        overwrite_mode = OverwriteMode.NO_OVERWRITE
         
     LOG.info('Using ffmpeg version {}'.format(ffmpeg_check_version()))
 
@@ -312,7 +326,7 @@ if __name__ == '__main__':
     LOG.info('Sources provided a total of {} audio files'.format(len(sources)))
     LOG.info('Preparing target paths ..')
     work_units = prepare_work_units(sources, args.destdir,
-                                    args.template, args.playlist_template, args.overwrite)
+                                    args.template, args.playlist_template, overwrite_mode)
 
     if args.dry:
         LOG.info('Dry run only, target paths and status:')
