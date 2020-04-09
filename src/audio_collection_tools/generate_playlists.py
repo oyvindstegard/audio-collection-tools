@@ -13,7 +13,7 @@ import mutagen
 import fnmatch
 
 # Extend this list to recognize more file types as audio files:
-PLAYLIST_FILE_PATTERNS = ['*.mp3', '*.ogg', '*.flac', '*.m4a', '*.wav', '*.wma', '*.ape', '*.wv']
+PLAYLIST_FILE_PATTERNS = ['*.mp3', '*.ogg', '*.flac', '*.m4a', '*.wav', '*.wma', '*.ape', '*.wv', '*.mpc']
 
 def write_pls(filename, audiofiles):
     if len(audiofiles) == 0:
