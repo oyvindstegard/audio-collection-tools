@@ -16,20 +16,18 @@ from audio_collection_tools.generate_playlists import *
 
 import argparse
 parser = argparse.ArgumentParser(
-    description="""Generate audio file playlists (m3u or pls), optionally filtering
-                and sorting on various criteria. Please note that
-                relative directory paths specified for a playlist
-                are interpreted as relative to the playlist file
-                itself, and not the directory where this command
-                is invoked. Use absolute paths in the specs if you
-                want that. The directories are always processed
-                recursively.""",
-    epilog="""Available sort criteria: mtime, genre, date, track, random.
-              (Sorting by track only makes sense when making a
-              playlist for an album.) Available filters: genre
-              (case insensitive regexp). Use genre=!<regexp> to
-              match anything but the regexp. Sort and genre can be
-              combined. Recognized audio files: {}""".format(
+    description="""Generate audio file playlists (m3u or pls), optionally filtering and sorting
+                on various criteria. Please note that relative directory paths
+                specified for a playlist are interpreted as relative to the
+                playlist file itself, and not the directory where this command
+                is invoked. Use absolute paths in the specs if you want that.
+                The directories are always processed recursively.""",
+    epilog="""Available sort criteria: filename, dirname, mtime, genre, date, track,
+              random. You can specify multiple sort criteria per playlist. Default
+              is "sort=dirname,sort=filename". Use sort=!<criterium> to reverse
+              order (descending). Available filters: genre (case insensitive
+              regexp). Use genre=!<regexp> to match anything but the regexp.
+              Sort and genre can be combined. Recognized audio files: {}""".format(
                   ', '.join(map(lambda p: p[2:], PLAYLIST_FILE_PATTERNS))))
 
 parser.add_argument('plspecs', metavar='PLSPEC', type=str, nargs='+',
@@ -37,12 +35,11 @@ parser.add_argument('plspecs', metavar='PLSPEC', type=str, nargs='+',
                     playlists/rock.m3u:/music/Album/,genre='rock|metal',sort=date""")
 
 parser.add_argument('-u','--force-utf8', action='store_true', dest='force_utf8',
-                    help="""Force UTF-8 encoding for regular .m3u playlists. This violates the
-                    spec, but allows creating .m3u files
-                    containing audio file names with characters
-                    outside of the latin-1 character set. Has no
-                    effect for .pls or .m3u8 playlists, which
-                    always use UTF-8-encoding.""")
+                    help="""Force UTF-8 encoding for regular .m3u playlists. This violates the spec, but
+                    allows creating .m3u files containing audio file names with
+                    characters outside of the latin-1 character set. Has no
+                    effect for .pls or .m3u8 playlists, which always use
+                    UTF-8-encoding.""")
 
 parser.add_argument('-v', '--version', action='version', version=VERSION)
 
@@ -55,7 +52,7 @@ for arg in args.plspecs:
         sys.stderr.write('Error: each spec must contain a colon separating the playlist file from dirs')
         sys.exit(1)
 
-    sortspec = None
+    sortspecs = []
     genrematch = None
     genrematch_invert = False
     dirlist = []
@@ -68,10 +65,13 @@ for arg in args.plspecs:
             try:
                 d, v = s.split('=', 1)
                 if d == 'sort':
-                    if v in ['mtime','genre','date','track','random']:
-                        sortspec = v
-                    else:
-                        raise ValueError('Invalid sorting spec: {}'.format(v))
+                    reverse = False
+                    if len(v) > 0 and v[0] == '!':
+                        reverse = True
+                        v = v[1:]
+
+                    sortspecs.append((v, reverse))
+
                 elif d == 'genre':
                     if len(v) > 0 and v[0] == '!':
                         genrematch_invert = True
@@ -85,7 +85,7 @@ for arg in args.plspecs:
         if not os.path.isdir(d):
             raise ValueError('Not a directory: {}'.format(d))
 
-    pl_specs.append(PlaylistSpec(plfile, dirlist, args.force_utf8, sortspec, genrematch, genrematch_invert))
+    pl_specs.append(PlaylistSpec(plfile, dirlist, args.force_utf8, sortspecs, genrematch, genrematch_invert))
 
 for plspec in pl_specs:
     generate_playlist(plspec)

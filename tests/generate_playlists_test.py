@@ -47,3 +47,21 @@ def test_generate_m3u_playlist(m3u_tmpfile, audio_tmpdir):
 
         assert not 'notaudio.txt' in contents
         
+def test_sorting(m3u_tmpfile, audio_tmpdir):
+    pl_audio_dir = os.path.relpath(os.path.join(audio_tmpdir, 'tracks'), os.path.dirname(m3u_tmpfile))
+    import time
+    now = time.time()
+    os.utime(os.path.join(audio_tmpdir, 'tracks/05.ogg'), (now, now))
+    for track in ['tracks/01.ogg', 'tracks/02.ogg', 'tracks/03.ogg', 'tracks/04.ogg']:
+        os.utime(os.path.join(audio_tmpdir, track), (now-3600, now-3600))
+        
+    generate_playlist(PlaylistSpec(m3u_tmpfile, [pl_audio_dir], sortspecs=[('mtime', True), ('track', False)]))
+
+    with open(m3u_tmpfile, "r") as fh:
+        lines = [line.rstrip() for line in fh.readlines()]
+        assert '05.ogg' in lines[0]
+        assert '01.ogg' in lines[1]
+        assert '02.ogg' in lines[2]
+        assert '03.ogg' in lines[3]
+        assert '04.ogg' in lines[4]
+

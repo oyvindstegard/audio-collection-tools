@@ -66,28 +66,34 @@ def list_audiofiles_recursively(dir='.'):
 
     return audiofiles
 
-def sort_mtime(files):
-    files.sort(key=lambda f: os.path.getmtime(f), reverse=True)
+def sort_filename(files, reverse=False):
+    files.sort(key=lambda f: os.path.basename(f), reverse=reverse)
 
-def sort_date(audiofiles):
+def sort_dirname(files, reverse=False):
+    files.sort(key=lambda f: os.path.dirname(f), reverse=reverse)
+
+def sort_mtime(files, reverse=False):
+    files.sort(key=lambda f: os.path.getmtime(f), reverse=reverse)
+
+def sort_date(audiofiles, reverse=False):
     def get_date(f):
         try:
             return Tags(f).get('date') or '_'
         except:
             return '_'
 
-    audiofiles.sort(key=get_date, reverse=True)
+    audiofiles.sort(key=get_date, reverse=reverse)
 
-def sort_genre(audiofiles):
+def sort_genre(audiofiles, reverse=False):
     def get_genre(f):
         try:
             return Tags(f).get('genre') or '_'
         except:
             return '_'
         
-    audiofiles.sort(key=get_genre)
+    audiofiles.sort(key=get_genre, reverse=reverse)
 
-def sort_track(audiofiles):
+def sort_track(audiofiles, reverse=False):
     def get_track(f):
         try:
             tn = Tags(f).get('tracknumber')
@@ -97,8 +103,8 @@ def sort_track(audiofiles):
             return int(tn) if tn else 0
         except:
             return 0
-        
-    audiofiles.sort(key=get_track)
+
+    audiofiles.sort(key=get_track, reverse=reverse)
 
 def sort_random(audiofiles):
     from random import shuffle
@@ -125,18 +131,23 @@ def generate_playlist(plspec):
         audiofiles = [audiofile for audiofile in audiofiles
                       if match_genre(plspec.genrematch, audiofile) != plspec.genrematch_invert]
 
-    if plspec.sortspec == 'mtime':
-        sort_mtime(audiofiles)
-    elif plspec.sortspec == 'genre':
-        sort_genre(audiofiles)
-    elif plspec.sortspec == 'date':
-        sort_date(audiofiles)
-    elif plspec.sortspec == 'track':
-        sort_track(audiofiles)
-    elif plspec.sortspec == 'random':
-        sort_random(audiofiles)
-    elif plspec.sortspec is not None:
-        raise ValueError('Unknown sort criterium: {}'.format(plspec.sortspec))
+    for field, reverse in reversed(plspec.sortspecs):
+        if field == 'filename':
+            sort_filename(audiofiles, reverse)
+        elif field == 'dirname':
+            sort_dirname(audiofiles, reverse)
+        elif field == 'mtime':
+            sort_mtime(audiofiles, reverse)
+        elif field == 'genre':
+            sort_genre(audiofiles, reverse)
+        elif field == 'date':
+            sort_date(audiofiles, reverse)
+        elif field == 'track':
+            sort_track(audiofiles, reverse)
+        elif field == 'random':
+            sort_random(audiofiles)
+        else:
+            raise ValueError('Unknown sort criterium: {}'.format(field))
 
     os.chdir(cwd)
 
@@ -202,15 +213,15 @@ class Tags:
 
 class PlaylistSpec:
     def __init__(self, plfile, dirs,
-                 force_utf8=False, sortspec=None, genrematch=None, genrematch_invert=False):
+                 force_utf8=False, sortspecs=[], genrematch=None, genrematch_invert=False):
         self.plfile = plfile
         self.dirs = dirs
         self.force_utf8 = force_utf8
-        self.sortspec = sortspec
+        self.sortspecs = sortspecs
         self.genrematch = genrematch
         self.genrematch_invert = genrematch_invert
 
     def __str__(self):
         gi = '!' if self.genrematch_invert else ''
         return 'PlaylistSpec{{{}, sortspec = {}, genrematch = {}{}, dirlist = {}}}'.format(
-            self.plfile, self.sortspec, gi, self.genrematch, self.dirs)
+            self.plfile, self.sortspecs, gi, self.genrematch, self.dirs)
