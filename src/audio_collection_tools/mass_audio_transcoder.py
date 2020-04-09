@@ -575,8 +575,11 @@ def prepare_work_units(sources, destdir, naming_template, playlist_naming_templa
 
         if targetpath in targetpaths:
             work_unit.status = Status.SKIPPED_NAME_COLLISION
-            colliding_source = targetpaths[targetpath];
-            LOG.warn("Naming collision between sources '{}' and '{}' for target path '{}', skipping".format(colliding_source.filepath, source.filepath, targetpath))
+            colliding_source = targetpaths[targetpath]
+            source_desc = '{}#{}:{}'.format(source.playlist_file, source.playlist_filenumber, source.filepath) if source.playlist_file else source.filepath
+            colliding_source_desc = '{}#{}:{}'.format(colliding_source.playlist_file, colliding_source.playlist_filenumber, colliding_source.filepath) if colliding_source.playlist_file else colliding_source.filepath
+            
+            LOG.warn("Naming collision between source '{}' and '{}' for target path '{}', using first source".format(colliding_source_desc, source_desc, targetpath))
             continue
         else:
             targetpaths[targetpath] = source
