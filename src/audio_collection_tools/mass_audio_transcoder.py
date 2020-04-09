@@ -270,9 +270,10 @@ PATH_CLEANING_PATTERNS = [(re.compile(p), r) for p, r in
                            (r'/[.]+', '/'),
                            (r'\s{2,}', ' '),
                            (r'\s*/\s*', '/'),
-                           (r'/{2,}', '/')]]
+                           (r'/{2,}', '/'),
+                           (r'([^/]{200,})', lambda m: m.group(1)[:200])]]
 def clean_path(path):
-    """Remove file system unsafe characters from file path."""
+    """Remove file system unsafe characters from file path, ensure path components stay within typical file system limits."""
     for pattern, replacement in PATH_CLEANING_PATTERNS:
         path = re.sub(pattern, replacement, path)
 
@@ -590,6 +591,7 @@ def prepare_work_units(sources, destdir, naming_template, playlist_naming_templa
                 LOG.warn("Source file '{}' has target path '{}' which already exists and is newer, skipping".format(source.filepath, targetpath))
                 continue
 
+        
         work_unit.status = Status.READY
 
     return work_units
