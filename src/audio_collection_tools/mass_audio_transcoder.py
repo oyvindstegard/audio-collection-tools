@@ -58,6 +58,7 @@ class SynchronizedLog:
     def __init__(self, log, lock):
         self.log = log
         self.lock = lock
+        self.warn_enabled = True
     def info(self, msg, *args, **kwargs):
         with self.lock:
             self.log.info(msg, *args, **kwargs)
@@ -65,6 +66,7 @@ class SynchronizedLog:
         with self.lock:
             self.log.debug(msg, *args, **kwargs)
     def warn(self, msg, *args, **kwargs):
+        if not self.warn_enabled: return
         with self.lock:
             self.log.warning(msg, *args, **kwargs)
     def error(self, msg, *args, **kwargs):
@@ -73,6 +75,8 @@ class SynchronizedLog:
     def setLevel(self, level):
         with self.lock:
             self.log.setLevel(level)
+    def disableWarn(self):
+        self.warn_enabled = False
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(processName)s] %(levelname)-8s %(message)s')
 LOG_LOCK = multiprocessing.Lock()
