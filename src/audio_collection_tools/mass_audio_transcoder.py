@@ -593,7 +593,7 @@ def prepare_work_units(sources, destdir, naming_template, playlist_naming_templa
                 work_unit.status = Status.SKIPPED_TARGETPATH_EXISTS
                 LOG.warn("Source file '{}' has target path '{}' which already exists and overwrite is off, skipping".format(source.filepath, targetpath))
                 continue
-            elif overwritemode is OverwriteMode.OVERWRITE_IF_OLDER and os.stat(targetpath).st_mtime >= os.stat(source.filepath).st_mtime:
+            elif overwritemode is OverwriteMode.OVERWRITE_IF_OLDER and os.path.getmtime(targetpath) >= os.path.getmtime(source.filepath):
                 work_unit.status = Status.SKIPPED_TARGETPATH_NEWER
                 LOG.warn("Source file '{}' has target path '{}' which already exists and is newer, skipping".format(source.filepath, targetpath))
                 continue
