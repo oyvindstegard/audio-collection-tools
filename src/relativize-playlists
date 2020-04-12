@@ -5,7 +5,7 @@
 #
 # Relativize paths in playlist files.
 #
-# Copyright 2018, Øyvind Stegard <oyvind@stegard.net>
+# Copyright 2018-2020, Øyvind Stegard <oyvind@stegard.net>
 
 from audio_collection_tools import *
 from audio_collection_tools.relativize_playlists import *

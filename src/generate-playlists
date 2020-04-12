@@ -9,7 +9,7 @@
 #
 # Requires Python 3 and python-mutagen.
 #
-# Copyright (C) 2018, Øyvind Stegard <oyvind@stegard.net>
+# Copyright (C) 2018-2020, Øyvind Stegard <oyvind@stegard.net>
 
 from audio_collection_tools import *
 from audio_collection_tools.generate_playlists import *
@@ -23,11 +23,12 @@ parser = argparse.ArgumentParser(
                 is invoked. Use absolute paths in the specs if you want that.
                 The directories are always processed recursively.""",
     epilog="""Available sort criteria: filename, dirname, mtime, genre, date, track,
-              random. You can specify multiple sort criteria per playlist. Default
-              is "sort=dirname,sort=filename". Use sort=!<criterium> to reverse
-              order (descending). Available filters: genre (case insensitive
-              regexp). Use genre=!<regexp> to match anything but the regexp.
-              Sort and genre can be combined. Recognized audio files: {}""".format(
+              artist, album, title, random. You can specify multiple sort
+              criteria per playlist. Default is "sort=dirname,sort=filename".
+              Use sort=!<criterium> to reverse order (descending). Available
+              filters: genre (case insensitive regexp). Use genre=!<regexp> to
+              match anything but the regexp. Sort and genre can be combined.
+              Recognized audio files: {}""".format(
                   ', '.join(map(lambda p: p[2:], PLAYLIST_FILE_PATTERNS))))
 
 parser.add_argument('plspecs', metavar='PLSPEC', type=str, nargs='+',

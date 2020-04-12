@@ -4,7 +4,7 @@
 #
 # Requires Python 3 and python-mutagen.
 #
-# Copyright (C) 2018, Øyvind Stegard <oyvind@stegard.net>
+# Copyright (C) 2018-2020, Øyvind Stegard <oyvind@stegard.net>
 
 import os
 import sys
@@ -75,24 +75,15 @@ def sort_dirname(files, reverse=False):
 def sort_mtime(files, reverse=False):
     files.sort(key=lambda f: os.path.getmtime(f), reverse=reverse)
 
-def sort_date(audiofiles, reverse=False):
-    def get_date(f):
+def sort_by_tag_value(audiofiles, tag, reverse=False):
+    def get_tag(f):
         try:
-            return Tags(f).get('date') or '_'
+            return Tags(f).get(tag.lower()) or ''
         except:
-            return '_'
+            return ''
 
-    audiofiles.sort(key=get_date, reverse=reverse)
-
-def sort_genre(audiofiles, reverse=False):
-    def get_genre(f):
-        try:
-            return Tags(f).get('genre') or '_'
-        except:
-            return '_'
-        
-    audiofiles.sort(key=get_genre, reverse=reverse)
-
+    audiofiles.sort(key=get_tag, reverse=reverse)
+    
 def sort_track(audiofiles, reverse=False):
     def get_track(f):
         try:
@@ -139,9 +130,15 @@ def generate_playlist(plspec):
         elif field == 'mtime':
             sort_mtime(audiofiles, reverse)
         elif field == 'genre':
-            sort_genre(audiofiles, reverse)
+            sort_by_tag_value(audiofiles, 'genre', reverse)
         elif field == 'date':
-            sort_date(audiofiles, reverse)
+            sort_by_tag_value(audiofiles, 'date', reverse)
+        elif field == 'artist':
+            sort_by_tag_value(audiofiles, 'artist', reverse)
+        elif field == 'album':
+            sort_by_tag_value(audiofiles, 'album', reverse)
+        elif field == 'title':
+            sort_by_tag_value(audiofiles, 'title', reverse)
         elif field == 'track':
             sort_track(audiofiles, reverse)
         elif field == 'random':

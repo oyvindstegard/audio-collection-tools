@@ -82,7 +82,7 @@ def test_prepare_workunits_no_overwrite(audio_tmpdir, empty_tmpdir):
     sources = scan_inputs([os.path.join(audio_tmpdir, 'audio.mp3')], TranscodeSpec('copy', False))
     assert len(sources) == 1
     
-    shutil.copyfile(sources[0].filepath, os.path.join(empty_tmpdir, 'TestArtist - TestTitle.mp3'))
+    shutil.copyfile(sources[0].filepath, os.path.join(empty_tmpdir, 'B - B title.mp3'))
 
     work_units = prepare_work_units(sources, empty_tmpdir, '<artist> - <title>', '<artist> - <title>', OverwriteMode.NO_OVERWRITE)
 
@@ -93,7 +93,7 @@ def test_prepare_workunits_overwrite(audio_tmpdir, empty_tmpdir):
     sources = scan_inputs([os.path.join(audio_tmpdir, 'audio.mp3')], TranscodeSpec('copy', False))
     assert len(sources) == 1
     
-    shutil.copyfile(sources[0].filepath, os.path.join(empty_tmpdir, 'TestArtist - TestTitle.mp3'))
+    shutil.copyfile(sources[0].filepath, os.path.join(empty_tmpdir, 'B - B title.mp3'))
 
     work_units = prepare_work_units(sources, empty_tmpdir, '<artist> - <title>', '<artist> - <title>', OverwriteMode.OVERWRITE)
 
@@ -105,7 +105,7 @@ def test_prepare_workunits_overwrite_if_older(audio_tmpdir, empty_tmpdir):
     sources = scan_inputs([os.path.join(audio_tmpdir, 'audio.mp3')], TranscodeSpec('copy', False))
     assert len(sources) == 1
     
-    shutil.copyfile(sources[0].filepath, os.path.join(empty_tmpdir, 'TestArtist - TestTitle.mp3'))
+    shutil.copyfile(sources[0].filepath, os.path.join(empty_tmpdir, 'B - B title.mp3'))
 
     work_units = prepare_work_units(sources, empty_tmpdir, '<artist> - <title>', '<artist> - <title>', OverwriteMode.OVERWRITE_IF_OLDER)
 
@@ -116,7 +116,7 @@ def test_prepare_workunits_overwrite_if_older(audio_tmpdir, empty_tmpdir):
     import time
     now = time.time()
     os.utime(sources[0].filepath, (now, now))
-    os.utime(os.path.join(empty_tmpdir, 'TestArtist - TestTitle.mp3'), (now-3600,now-3600))
+    os.utime(os.path.join(empty_tmpdir, 'B - B title.mp3'), (now-3600,now-3600))
     work_units = prepare_work_units(sources, empty_tmpdir, '<artist> - <title>', '<artist> - <title>', OverwriteMode.OVERWRITE_IF_OLDER)
 
     assert len(work_units) == 1

@@ -4,7 +4,7 @@
 #
 # Relativize paths in playlist files.
 #
-# Copyright 2018, Øyvind Stegard <oyvind@stegard.net>
+# Copyright 2018-2020, Øyvind Stegard <oyvind@stegard.net>
 
 import os
 import sys

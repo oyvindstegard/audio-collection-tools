@@ -3,10 +3,10 @@
 # mass-audio-transcoder module
 #
 # Mass parallel Audio Transcoder ffmpeg frontend.
-# Copyright 2018, Øyvind Stegard <oyvind@stegard.net>
-#
 # Requires: Python 3, python-mutagen and a recent-ish (2017/18) ffmpeg command
 # in PATH.
+#
+# Copyright 2018-2020, Øyvind Stegard <oyvind@stegard.net>
 
 import sys
 import os, shutil, subprocess
