@@ -528,9 +528,9 @@ def generate_target_path(source, template, destdir):
     result = expand_template(template, var_resolver, False)
     result = clean_path(result).strip()
 
-    if len(result) == 0 or result.endswith('/'):
+    if len(result) == 0 or result.endswith('/') or os.path.isabs(result):
         result = clean_path(os.path.join(source.parentdir_basename(), source.basename(False)))
-        LOG.warn("Template expansion resulted in empty string for source file '{}', using fallback naming: '{}'".format(source.filepath, result))
+        LOG.warn("Template expansion resulted in bad file path for source file '{}', using fallback naming: '{}'".format(source.filepath, result))
 
     if source.transcode_spec.codec != 'copy':
         ext = FFMPEG_CODEC_EXT[source.transcode_spec.codec]
@@ -540,10 +540,6 @@ def generate_target_path(source, template, destdir):
     if not result.endswith('.' + ext):
         result += '.' + ext
 
-    if os.path.isabs(result):
-        LOG.warn("Template expansion resulted in an absolute path '{}' for source file '{}', this is not allowed, skipping.".format(result, source.filepath))
-        return None
-    
     abspath = os.path.join(destdir, result)
 
     return abspath
