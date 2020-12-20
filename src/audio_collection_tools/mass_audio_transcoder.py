@@ -142,7 +142,7 @@ def ffmpeg_check_version():
         raise CommandError("Unable to determine ffmpeg version for executable '{}'".format(ffmpeg_path))
 
 def ffmpeg_build_args(inputfile, outputfile, codec, transcode_quality=None, transcode_bitrate=None):
-    args = ['-nostdin', '-i', inputfile, '-y']
+    args = ['-nostdin', '-i', inputfile, '-y', '-map_chapters', '-1']
     var_resolver = {'transcode_quality':transcode_quality, 'transcode_bitrate':transcode_bitrate}
 
     inputfiletype = get_normalized_extension(inputfile)
