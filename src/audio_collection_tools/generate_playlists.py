@@ -114,7 +114,8 @@ def match_genre(compiled_regexp, audiofile):
 
 def generate_playlist(plspec):
     cwd = os.getcwd()
-    os.chdir(os.path.dirname(plspec.plfile))
+    if os.path.dirname(plspec.plfile):
+        os.chdir(os.path.dirname(plspec.plfile))
     audiofiles = []
     for d in plspec.dirs:
         audiofiles += list_audiofiles_recursively(d)
