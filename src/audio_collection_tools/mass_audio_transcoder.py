@@ -47,7 +47,7 @@ FFMPEG_DEFAULT_CODEC = 'mp3'
 INPUT_AUDIOFILE_PATTERNS = ['*.mp3', '*.ogg', '*.flac', '*.m4a', '*.mpc', '*.wav']
 
 # Default templates for naming of transcoded files:
-DEFAULT_TEMPLATE = '<albumartist_or_artist>< - +album+>/<track+. ><title>'
+DEFAULT_TEMPLATE = '<albumartist_or_artist>< - +album+>< disc +discnumber>/<track+. ><title>'
 DEFAULT_TEMPLATE_PLAYLIST = '<playlist_name>/<playlist_filenumber>. <title> - <artist>'
 
 # Wrap logger with simple inter-process mutex-locking to avoid output
