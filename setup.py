@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import setuptools
 from src.audio_collection_tools import VERSION
 
