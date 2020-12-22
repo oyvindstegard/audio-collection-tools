@@ -69,7 +69,7 @@ slashes (directory separators).
 The default naming templates for audio files that are not sourced from
 a playlist are:
 
-    <albumartist_or_artist>< - +album+>/<track+. ><title>
+    <albumartist_or_artist>< - +album+>< disc +discnumber+>/<track+. ><title>
     
 Template variables are enclosed in "<..>" and will typically be
 metadata from audio file tags, such as in the default template shown
