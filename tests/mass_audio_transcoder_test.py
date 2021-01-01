@@ -16,18 +16,19 @@ def test_scan_inputs_directory(audio_tmpdir):
     sources = scan_inputs([audio_tmpdir], TranscodeSpec('mp3', False))
     sources.sort(key=lambda s: s.filepath)
 
-    assert len(sources) == 10
+    assert len(sources) == 11
 
     assert sources[0].filepath.endswith('audio/audio.m4a')
     assert sources[1].filepath.endswith('audio/audio.mp3')
     assert sources[2].filepath.endswith('audio/audio.ogg')
-    assert sources[3].filepath.endswith('audio/subdir/audio.flac')
-    assert sources[4].filepath.endswith('audio/subdir/audio.wav')
-    assert sources[5].filepath.endswith('audio/tracks/01.ogg')
-    assert sources[6].filepath.endswith('audio/tracks/02.ogg')
-    assert sources[7].filepath.endswith('audio/tracks/03.ogg')
-    assert sources[8].filepath.endswith('audio/tracks/04.ogg')
-    assert sources[9].filepath.endswith('audio/tracks/05.ogg')
+    assert sources[3].filepath.endswith('audio/opus/audio.opus')
+    assert sources[4].filepath.endswith('audio/subdir/audio.flac')
+    assert sources[5].filepath.endswith('audio/subdir/audio.wav')
+    assert sources[6].filepath.endswith('audio/tracks/01.ogg')
+    assert sources[7].filepath.endswith('audio/tracks/02.ogg')
+    assert sources[8].filepath.endswith('audio/tracks/03.ogg')
+    assert sources[9].filepath.endswith('audio/tracks/04.ogg')
+    assert sources[10].filepath.endswith('audio/tracks/05.ogg')
 
 def test_scan_inputs_files(audio_tmpdir):
     inputs = [os.path.join(audio_tmpdir, filepath) for filepath in ['audio.ogg', 'tracks/01.ogg']]
@@ -69,7 +70,7 @@ def test_scan_inputs_pls_playlist(audio_tmpdir):
 def test_scan_inputs_no_transcode_for(audio_tmpdir):
     sources = scan_inputs([audio_tmpdir], TranscodeSpec('mp3', False), ['ogg'])
 
-    assert len(sources) == 10
+    assert len(sources) == 11
 
     for source in sources:
         if source.filetype() == 'ogg':
@@ -121,6 +122,19 @@ def test_prepare_workunits_overwrite_if_older(audio_tmpdir, empty_tmpdir):
 
     assert len(work_units) == 1
     assert work_units[0].status == Status.READY
+
+
+def test_opus_workunit(audio_tmpdir, empty_tmpdir):
+    sources = scan_inputs([os.path.join(audio_tmpdir, 'opus/')], TranscodeSpec('aac', False))
+    assert len(sources) == 1
+
+    work_units = prepare_work_units(sources, empty_tmpdir, '<artist> - <title>', '<artist> - <title>', OverwriteMode.NO_OVERWRITE)
+
+    wu = work_units[0]
+    assert wu.status == Status.READY
+    
+    ffmpeg_build_args(wu.source.filepath, wu.targetpath, 'opus', 3, '160k')
+
 
 
 # TODO:

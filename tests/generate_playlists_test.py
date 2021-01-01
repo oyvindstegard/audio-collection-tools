@@ -12,6 +12,7 @@ def test_is_audio_file():
     assert is_audio_file('foo.MP3')
     assert is_audio_file('foo.flac')
     assert is_audio_file('foo.Flac')
+    assert is_audio_file('foo.OPUS')
     assert not is_audio_file('foo.txt')
 
 def test_generate_pls_playlist(pls_tmpfile, audio_tmpdir):
@@ -21,8 +22,8 @@ def test_generate_pls_playlist(pls_tmpfile, audio_tmpdir):
 
     with open(pls_tmpfile, "r") as fh:
         contents = fh.read()
-        assert 'NumberOfEntries=10' in contents
-        for audiofile in ['audio.m4a','audio.mp3','audio.ogg',
+        assert 'NumberOfEntries=11' in contents
+        for audiofile in ['audio.m4a','audio.mp3','audio.ogg', 'audio.opus',
                           'audio.flac','audio.wav']:
             assert audiofile in contents
 
@@ -38,7 +39,7 @@ def test_generate_m3u_playlist(m3u_tmpfile, audio_tmpdir):
 
     with open(m3u_tmpfile, "r") as fh:
         contents = fh.read()
-        for audiofile in ['audio.m4a','audio.mp3','audio.ogg',
+        for audiofile in ['audio.m4a','audio.mp3','audio.ogg', 'audio.opus',
                           'audio.flac','audio.wav']:
             assert audiofile in contents
 
@@ -77,4 +78,5 @@ def test_sorting_artist(m3u_tmpfile, audio_tmpdir):
         assert 'audio.m4a' in lines[1]
         assert 'audio.mp3' in lines[2]
         assert 'audio.ogg' in lines[3]
-        assert len(lines[4:]) == 6
+        assert 'audio.opus' in lines[4]
+        assert len(lines[5:]) == 6

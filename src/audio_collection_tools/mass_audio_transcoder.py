@@ -21,30 +21,35 @@ import logging.handlers
 import multiprocessing
 
 # ffmpeg option templates for various transcoding targets
-# for AAC targets, disable album art copying, since it's unreliable with ffmpeg
+# For AAC targets, cap sample rate to 48KHz
 FFMPEG_EXECUTABLE = 'ffmpeg'
 FFMPEG_CODEC_OPTS = {'mp3':      ['-codec:a libmp3lame',
                                   '<-qscale:a +transcode_quality+> <-b:a +transcode_bitrate+k>',
                                   '-id3v2_version 3'],
-                     'aac':      ['-codec:v copy -codec:a aac',
+                     'aac':      ['-codec:v copy -filter:a aformat=sample_rates=32000|44100|48000',
+                                  '-codec:a aac',
                                   '<-vbr +transcode_quality+> <-b:a +transcode_bitrate+k>'],
-                     'fdkaac':   ['-codec:v copy -codec:a libfdk_aac',
+                     'fdkaac':   ['-codec:v copy -filter:a aformat=sample_rates=32000|44100|48000',
+                                  '-codec:a libfdk_aac',
                                   '<-vbr +transcode_quality+> <-b:a +transcode_bitrate+k>'],
                      'vorbis':   ['-codec:a libvorbis',
                                   '<-qscale:a +transcode_quality+> <-b:a +transcode_bitrate+k>'],
+                     'opus':     ['-codec:a libopus',
+                                  '<-b:a +transcode_bitrate+k>'],
                      'copy':     []
                      }
 
 # Ogg audio files have metadata attached to audio stream instead of
 # container, which makes a difference for ffmpeg.
-FFMPEG_INPUT_FILE_OPTS = {'ogg': ['-map_metadata 0:s:0']}
+FFMPEG_INPUT_FILE_OPTS = {'ogg': ['-map_metadata 0:s:0'],
+                          'opus': ['-map_metadata 0:s:0']}
 
-FFMPEG_CODEC_EXT  = {'vorbis': 'ogg', 'mp3':'mp3', 'aac':'m4a', 'fdkaac':'m4a', 'copy':'*'}
-FFMPEG_DEFAULT_CODEC = 'mp3'
+FFMPEG_CODEC_EXT = {'vorbis': 'ogg', 'opus': 'opus', 'mp3':'mp3', 'aac':'m4a',
+                    'fdkaac':'m4a', 'copy':'*'}
 
 # Basic list of supported input formats. Other formats will work as long as both
 # mutagen and ffmpeg understands how to decode them.
-INPUT_AUDIOFILE_PATTERNS = ['*.mp3', '*.ogg', '*.flac', '*.m4a', '*.mpc', '*.wav']
+INPUT_AUDIOFILE_PATTERNS = ['*.mp3', '*.ogg', '*.flac', '*.m4a', '*.mpc', '*.opus', '*.wav']
 
 # Default templates for naming of transcoded files:
 DEFAULT_TEMPLATE = '<albumartist_or_artist>< - +album+>< disc +discnumber+>/<track+. ><title>'

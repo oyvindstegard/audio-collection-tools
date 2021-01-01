@@ -265,7 +265,7 @@ if __name__ == '__main__':
                         dest='overwrite', help="""Overwrite existing
                         files at destination paths.""", default=False)
 
-    parser.add_argument('-c', '--codec', type=str, default='mp3', help="""
+    parser.add_argument('-c', '--codec', type=str, default='aac', help="""
                         Select audio codec. Use 'copy' to transfer without transcoding.""",
                         choices=FFMPEG_CODEC_OPTS)
 
