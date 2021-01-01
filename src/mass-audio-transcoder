@@ -351,8 +351,17 @@ if __name__ == '__main__':
         LOG.debug('init {}'.format(multiprocessing.current_process().name))
 
     with multiprocessing.Pool(multiprocessing.cpu_count(), pool_worker_init) as pool:
+        # Keep work unit chunks small in size. Even though smaller chunks lead
+        # to more IPC overhead, the bulk of time is spent in ffmpeg encoding
+        # processes anyway. Keeping chunk size small avoids idle workers when
+        # nearing the end of the transcoding process and no more huge chunks are
+        # available.
+        chunksize = min(multiprocessing.cpu_count()*4, len(work_units) // (multiprocessing.cpu_count()*4) + 1)
+
+        LOG.debug('Work unit chunk size: {}'.format(chunksize))
+
         try:
-            work_units = pool.map_async(execute_work_unit, work_units).get()
+            work_units = pool.map_async(execute_work_unit, work_units, chunksize).get()
             failed = sum(map(lambda wu: 1 if wu.status.is_failed() else 0, work_units))
             skipped = sum(map(lambda wu: 1 if wu.status.is_skipped() else 0, work_units))
             completed = sum(map(lambda wu: 1 if wu.status.is_completed() else 0, work_units))
