@@ -23,8 +23,7 @@ that fix compatibility issues are welcome.)
 
 ## Installation
 
-    $ git clone https://github.com/oyvindstegard/audio-collection-tools.git
-    $ python3 setup.py install
+    $ pip install git+https://github.com/oyvindstegard/audio-collection-tools.git
 
 ## The tools so far
 
