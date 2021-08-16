@@ -93,8 +93,8 @@ for arg in args.plspecs:
                 sys.exit(1)
 
     for d in [os.path.join(os.path.dirname(plfile), x) for x in dirlist]:
-        if not os.path.isdir(d):
-            raise ValueError('Not a directory: {}'.format(d))
+        if not os.path.isdir(d) and not os.path.isfile(d):
+            raise ValueError('Not a directory or a file: {}'.format(d))
 
     pl_specs.append(PlaylistSpec(plfile, dirlist, args.force_utf8, sortspecs, genrematch, genrematch_invert))
 
