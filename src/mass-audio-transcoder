@@ -7,7 +7,7 @@
 # Requires: Python 3, python-mutagen and a recent-ish (2017/18) ffmpeg
 # command in PATH.
 #
-# Copyright 2018-2020, Øyvind Stegard <oyvind@stegard.net>
+# Copyright 2018-2025, Øyvind Stegard <oyvind@stegard.net>
 
 from audio_collection_tools import *
 from audio_collection_tools.mass_audio_transcoder import *
@@ -28,7 +28,11 @@ def get_playlist_targetpaths_map(work_units):
     return val
 
 def write_playlist_files(work_units, destdir, overwrite=False, playlist_format=None):
-    """Write any playlist files in work unit list to destination."""
+    """Write any playlist files in work unit list to destination.
+
+    Returns list of target playlist file paths.
+    """
+    playlist_paths = []
     playlist_map = get_playlist_targetpaths_map(work_units)
     for playlist_file in playlist_map:
         destdir = os.path.realpath(destdir)
@@ -37,6 +41,8 @@ def write_playlist_files(work_units, destdir, overwrite=False, playlist_format=N
             playlist_dest = os.path.join(destdir, playlist_name + '.' + playlist_format)
         else:
             playlist_dest = os.path.join(destdir, os.path.basename(playlist_file))
+
+        playlist_paths.append(playlist_dest)
 
         if os.path.exists(playlist_dest):
             LOG.warn('File exists at destination and overwrite is not enabled: {}'.format(playlist_dest))
@@ -51,6 +57,17 @@ def write_playlist_files(work_units, destdir, overwrite=False, playlist_format=N
         else:
             raise ApplicationError('Cannot write such playlists: {}'.format(playlist_file))
 
+    return playlist_paths
+
+def write_outputs_to_file(work_units, target_playlist_files, output_file):
+    targetpaths = set([wu.targetpath for wu in work_units])
+    targetpaths = targetpaths.union(target_playlist_files)
+
+    LOG.info('Writing all target paths to file {} ..'.format(output_file))
+    with open(output_file, 'w', encoding='utf-8') as output:
+        for path in sorted(targetpaths):
+            output.write(path + '\n')
+            
 def scan_inputs(inputs, transcode_spec, no_transcode_for=None):
     """Scans list of inputs and returns a list of Source instances."""
     sources = []
@@ -144,7 +161,7 @@ def execute_work_unit(work_unit):
 
 class HelpTemplatesAction(argparse.Action):
     def __init__(self, option_strings, dest, nargs=None, **kwargs):
-         super().__init__(option_strings, dest, nargs='?', **kwargs)
+        super().__init__(option_strings, dest, nargs='?', **kwargs)
     def __call__(self, parser, namespace, values, option_string=None):
         doc = """Templates are used for naming transcoded target files automatically.
 
@@ -286,6 +303,12 @@ if __name__ == '__main__':
     parser.add_argument('-w', '--disable-warn', dest='log_disable_warn',
                         action='store_true', help="""Disable warning logs, show only info and errors""", default=False)
 
+    parser.add_argument('--workers', type=int, dest='workers', default=multiprocessing.cpu_count(),
+                        help="""Set number of worker processes""")
+
+    parser.add_argument('--write-target-paths', type=str, dest='target_paths_file',
+                        metavar='FILE', help="""Write a list of all target paths to FILE""")
+
     parser.add_argument('-v', '--version', action='version', version=VERSION)
 
     args = parser.parse_args()
@@ -319,7 +342,12 @@ if __name__ == '__main__':
     else:
         overwrite_mode = OverwriteMode.NO_OVERWRITE
         
+    if args.workers <= 0:
+        LOG.error('Number of workers must be >= 1')
+        sys.exit(1)
+        
     LOG.info('Using ffmpeg version {}'.format(ffmpeg_check_version()))
+
 
     transcode_spec = TranscodeSpec(args.codec, args.force_transcode, args.quality, args.bitrate)
 
@@ -350,7 +378,7 @@ if __name__ == '__main__':
                                                         multiprocessing.current_process().name)
         LOG.debug('init {}'.format(multiprocessing.current_process().name))
 
-    with multiprocessing.Pool(multiprocessing.cpu_count(), pool_worker_init) as pool:
+    with multiprocessing.Pool(args.workers, pool_worker_init) as pool:
         # Keep work unit chunks small in size. Even though smaller chunks lead
         # to more IPC overhead, the bulk of time is spent in ffmpeg encoding
         # processes anyway. Keeping chunk size small avoids idle workers when
@@ -372,6 +400,9 @@ if __name__ == '__main__':
             sys.exit(130)
 
     # Write any playlist files
-    write_playlist_files(work_units, args.destdir, args.overwrite, args.playlist_target_format)
+    playlist_paths = write_playlist_files(work_units, args.destdir, args.overwrite, args.playlist_target_format)
+
+    if args.target_paths_file:
+        write_outputs_to_file(work_units, playlist_paths, args.target_paths_file)
 
     LOG.info('Finished.')
