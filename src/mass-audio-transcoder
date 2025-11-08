@@ -45,7 +45,7 @@ def write_playlist_files(work_units, destdir, overwrite=False, overwrite_if_olde
         playlist_paths.append(playlist_dest)
 
         if os.path.exists(playlist_dest):
-            if not overwrite or (overwrite_if_older and os.path.getmtime(playlist_dest) >= os.path.getmtime(playlist_file)):
+            if not overwrite and not (overwrite_if_older and os.path.getmtime(playlist_file) >= os.path.getmtime(playlist_dest)):
                 LOG.warn('Not overwriting existing destination playlist file: {}'.format(playlist_dest))
                 continue
             
