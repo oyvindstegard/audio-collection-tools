@@ -27,7 +27,7 @@ def get_playlist_targetpaths_map(work_units):
 
     return val
 
-def write_playlist_files(work_units, destdir, overwrite=False, playlist_format=None):
+def write_playlist_files(work_units, destdir, overwrite=False, overwrite_if_older=False, playlist_format=None):
     """Write any playlist files in work unit list to destination.
 
     Returns list of target playlist file paths.
@@ -45,8 +45,9 @@ def write_playlist_files(work_units, destdir, overwrite=False, playlist_format=N
         playlist_paths.append(playlist_dest)
 
         if os.path.exists(playlist_dest):
-            LOG.warn('File exists at destination and overwrite is not enabled: {}'.format(playlist_dest))
-            continue
+            if not overwrite or (overwrite_if_older and os.path.getmtime(playlist_dest) >= os.path.getmtime(playlist_file)):
+                LOG.warn('Not overwriting existing destination playlist file: {}'.format(playlist_dest))
+                continue
             
         playlist_paths = [os.path.relpath(filepath, destdir) for filepath in playlist_map[playlist_file]]
         LOG.info('Writing playlist {} ..'.format(playlist_dest))
@@ -400,8 +401,9 @@ if __name__ == '__main__':
             sys.exit(130)
 
     # Write any playlist files
-    playlist_paths = write_playlist_files(work_units, args.destdir, args.overwrite, args.playlist_target_format)
+    playlist_paths = write_playlist_files(work_units, args.destdir, args.overwrite, args.overwrite_if_older, args.playlist_target_format)
 
+    # Write all target paths to a file if requested:
     if args.target_paths_file:
         write_outputs_to_file(work_units, playlist_paths, args.target_paths_file)
 
