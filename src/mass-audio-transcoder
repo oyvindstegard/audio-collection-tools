@@ -32,7 +32,7 @@ def write_playlist_files(work_units, destdir, overwrite=False, overwrite_if_olde
 
     Returns list of target playlist file paths.
     """
-    playlist_paths = []
+    written_playlist_file_paths = []
     playlist_map = get_playlist_targetpaths_map(work_units)
     for playlist_file in playlist_map:
         destdir = os.path.realpath(destdir)
@@ -42,7 +42,7 @@ def write_playlist_files(work_units, destdir, overwrite=False, overwrite_if_olde
         else:
             playlist_dest = os.path.join(destdir, os.path.basename(playlist_file))
 
-        playlist_paths.append(playlist_dest)
+        written_playlist_file_paths.append(playlist_dest)
 
         if os.path.exists(playlist_dest):
             if not overwrite and not (overwrite_if_older and os.path.getmtime(playlist_file) >= os.path.getmtime(playlist_dest)):
@@ -58,11 +58,11 @@ def write_playlist_files(work_units, destdir, overwrite=False, overwrite_if_olde
         else:
             raise ApplicationError('Cannot write such playlists: {}'.format(playlist_file))
 
-    return playlist_paths
+    return written_playlist_file_paths
 
 def write_outputs_to_file(work_units, target_playlist_files, output_file):
     targetpaths = set([wu.targetpath for wu in work_units])
-    targetpaths = targetpaths.union(target_playlist_files)
+    targetpaths.update(target_playlist_files)
 
     LOG.info('Writing all target paths to file {} ..'.format(output_file))
     with open(output_file, 'w', encoding='utf-8') as output:
